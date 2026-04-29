@@ -1,0 +1,61 @@
+.bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--s-16);
+  font-family: ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.value {
+  color: var(--fg-0);
+}
+
+.sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line-0);
+}
+
+.state {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.idle,
+.closed {
+  color: var(--info);
+}
+
+.connecting {
+  color: var(--warning);
+}
+
+.open {
+  color: var(--ok);
+}
+
+.error {
+  color: var(--error);
+}
+
+.fps {
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+

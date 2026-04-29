@@ -1,0 +1,83 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-12);
+}
+
+.alertRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-12);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-1);
+  font-size: 12px;
+}
+
+.select {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-0);
+  border: 1px solid var(--line-0);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+
+.num {
+  width: 64px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-0);
+  border: 1px solid var(--line-0);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.logBox {
+  height: 60vh;
+  overflow: auto;
+  font-family: ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.logRow {
+  display: flex;
+  gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.level {
+  width: 54px;
+  font-variant-numeric: tabular-nums;
+}
+
+.INFO {
+  color: var(--info);
+}
+.WARN {
+  color: var(--warning);
+}
+.ERROR {
+  color: var(--error);
+}
+
+.msg {
+  color: var(--fg-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--fg-2);
+}
+

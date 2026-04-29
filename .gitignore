@@ -1,0 +1,79 @@
+### OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+### Editors / IDE
+.idea/
+.vscode/
+*.iml
+
+### Cursor (local agent artifacts)
+.cursor/
+
+### Python / backend
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# Virtualenvs
+backend/.venv/
+backend/venv/
+backend/.env/
+.venv/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+
+### Ultralytics / ML artifacts (DO NOT COMMIT)
+# weights / engines
+backend/models/**/*.pt
+backend/models/**/*.onnx
+backend/models/**/*.engine
+backend/models/**/*.torchscript
+backend/models/**/*.mlmodel
+backend/models/**/*.tflite
+
+# outputs / runs / datasets / caches
+runs/
+datasets/
+data/
+wandb/
+mlruns/
+*.cache
+
+### Node / frontend
+node_modules/
+dist/
+.vite/
+.turbo/
+.next/
+.output/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+### Env files / secrets
+.env
+.env.*
+!.env.example
+
+

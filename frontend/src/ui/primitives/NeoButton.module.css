@@ -1,0 +1,22 @@
+.btn {
+  cursor: pointer;
+  border: 1px solid var(--line-0);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2));
+  color: var(--fg-0);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow-inset), var(--shadow-out);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  user-select: none;
+}
+
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-inset-strong);
+}
+
+.danger {
+  border-color: rgba(255, 70, 70, 0.5);
+  color: var(--danger);
+}
+

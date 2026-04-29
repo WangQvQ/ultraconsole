@@ -1,0 +1,31 @@
+.card {
+  background: var(--panel-0);
+  border: 1px solid var(--line-0);
+  border-radius: 14px;
+  box-shadow: var(--shadow-inset), var(--shadow-out);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--line-0);
+}
+
+.title {
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--fg-1);
+}
+
+.right {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.body {
+  padding: 12px;
+}
+
