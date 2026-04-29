@@ -1,4 +1,4 @@
-# Ultralytics 工业级前端推理控制台（V1.0）
+# Ultralytics 工业级前端推理控制台
 
 面向工业质检 / 安防监控 / 算法调优场景的 **通用目标检测可视化控制台**：支持模型热切换、参数热更新、Webcam/Video/RTSP 输入、OSD 叠加渲染、遥测 HUD、结构化日志、阈值告警与 BadCase 归档。
 
@@ -56,7 +56,7 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8001
 ```
 
-#### 方式 B：conda（推荐 CUDA/多环境并存时）
+#### 方式 B：conda
 ```bash
 conda create -n ultralytics-console python=3.10 -y
 conda activate ultralytics-console
@@ -81,7 +81,7 @@ npm run dev
 
 ## 使用“魔改版 ultralytics”的方式
 
-### 方式 1：本地源码可编辑安装（推荐）
+### 方式 1：本地源码可编辑安装
 假设你魔改后的 ultralytics 源码在 `~/work/ultralytics`：
 
 ```bash
@@ -95,7 +95,7 @@ uvicorn app.main:app --reload --port 8001
 
 这样后端 `import ultralytics` 会直接使用你本地源码（修改后无需重新安装）。
 
-### 方式 2：把依赖指向本地路径（用于固定环境）
+### 方式 2：把依赖指向本地路径
 把 `backend/requirements.txt` 里的 `ultralytics>=...` 改成：
 
 ```txt
@@ -104,7 +104,7 @@ uvicorn app.main:app --reload --port 8001
 
 然后重新安装依赖即可。
 
-## 架构图（论文/文档用）
+## 架构图
 
 ```mermaid
 flowchart TB
@@ -161,10 +161,7 @@ V1 优先“可用与易集成”：前端只需填地址即可出画面；后�
 ### 2）模型/权重文件会不会被提交到开源仓库？
 不会：仓库已在 `.gitignore` 忽略 `backend/models/**/*.pt|onnx|engine` 等大文件类型。
 
-## 贡献指南（Contributing）
+## 贡献指南
 - 欢迎提 Issue/PR：
   - Bug：请带复现步骤、日志与输入源信息（Image/Video/Webcam/RTSP）
   - Feature：建议先开 Issue 讨论接口与交互
-
-## License
-建议使用 `Apache-2.0` 或 `MIT`（按你的开源策略选择）。
