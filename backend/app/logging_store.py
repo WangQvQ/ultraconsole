@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import threading
 import time
 from collections import deque
@@ -51,6 +52,6 @@ class LogStore:
         writer = csv.writer(f)
         writer.writerow(["ts", "level", "event", "msg", "fields_json"])
         for r in rows:
-            writer.writerow([r.ts, r.level, r.event, r.msg, r.fields.model_dump_json()])
+            writer.writerow([r.ts, r.level, r.event, r.msg, json.dumps(r.fields, ensure_ascii=False, separators=(",", ":"))])
         return f.getvalue()
 

@@ -106,18 +106,38 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [preview, setPreview] = useState<RoiPoint | undefined>(undefined) // source-normalized
+  const previewRef = useRef<RoiPoint | undefined>(undefined)
+  const polyRef = useRef<RoiPoint[]>(roi.polygon)
+  const closedRef = useRef<boolean>(roi.closed)
+  const redrawRef = useRef<((anchor?: HTMLElement) => void) | null>(null)
 
   const poly = useMemo(() => roi.polygon, [roi.polygon])
 
   useEffect(() => {
-    const anchor = props.anchorRef.current
-    const canvas = canvasRef.current
-    if (!anchor || !canvas) return
+    previewRef.current = preview
+  }, [preview])
 
+  useEffect(() => {
+    polyRef.current = poly
+  }, [poly])
+
+  useEffect(() => {
+    closedRef.current = roi.closed
+  }, [roi.closed])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    let alive = true
     let raf = 0
-    const redraw = () => {
+    let ro: ResizeObserver | null = null
+    let observed: HTMLElement | null = null
+
+    const redrawFor = (anchor: HTMLElement) => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
+        if (!alive) return
         const r = anchor.getBoundingClientRect()
         const dpr = window.devicePixelRatio || 1
         canvas.style.width = `${r.width}px`
@@ -132,22 +152,57 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
           ctx.clearRect(0, 0, r.width, r.height)
           return
         }
-        drawPolygon(ctx, poly, r.width, r.height, src.w, src.h, roi.closed ? undefined : preview, roi.closed)
+        const polyNow = polyRef.current
+        const closedNow = closedRef.current
+        const previewNow = closedNow ? undefined : previewRef.current
+        drawPolygon(ctx, polyNow, r.width, r.height, src.w, src.h, previewNow, closedNow)
       })
     }
+    redrawRef.current = (anchor?: HTMLElement) => {
+      const a = anchor ?? props.anchorRef.current
+      if (a) redrawFor(a)
+    }
 
-    redraw()
+    const bind = (anchor: HTMLElement) => {
+      if (observed === anchor) return
+      ro?.disconnect()
+      ro = new ResizeObserver(() => redrawFor(anchor))
+      ro.observe(anchor)
+      observed = anchor
+      redrawFor(anchor)
+    }
 
-    const ro = new ResizeObserver(() => redraw())
-    ro.observe(anchor)
-    window.addEventListener('resize', redraw, { passive: true })
+    const loopBind = () => {
+      if (!alive) return
+      const anchor = props.anchorRef.current
+      if (anchor) {
+        bind(anchor)
+        return
+      }
+      raf = requestAnimationFrame(loopBind)
+    }
+
+    const onWinResize = () => {
+      const anchor = props.anchorRef.current
+      if (anchor) redrawFor(anchor)
+    }
+
+    window.addEventListener('resize', onWinResize, { passive: true })
+    loopBind()
 
     return () => {
-      window.removeEventListener('resize', redraw)
-      ro.disconnect()
+      alive = false
+      window.removeEventListener('resize', onWinResize)
+      ro?.disconnect()
       cancelAnimationFrame(raf)
+      redrawRef.current = null
     }
-  }, [poly, preview, props.anchorRef, roi.closed])
+  }, [props.anchorRef])
+
+  // poly/preview/closed 更新时只触发一次轻量重绘，不重建 observer/resize 监听
+  useEffect(() => {
+    redrawRef.current?.()
+  }, [poly, preview, roi.closed])
 
   if (!roi.enabled) return null
 

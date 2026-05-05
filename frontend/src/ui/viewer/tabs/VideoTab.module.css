@@ -61,6 +61,8 @@
 .stage {
   position: relative;
   min-height: 420px;
+  height: 70vh;
+  max-height: 76vh;
   border: 1px solid var(--line-0);
   border-radius: 14px;
   overflow: hidden;

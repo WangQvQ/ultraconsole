@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiInferImage } from '../../../api/client'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { downloadBadCaseZip } from '../../../utils/badcase'
@@ -25,29 +25,24 @@ export function ImageTab() {
 
   const imgRef = useRef<HTMLImageElement | null>(null)
   const [imgUrl, setImgUrl] = useState<string | undefined>(undefined)
+  const imgUrlRef = useRef<string | null>(null)
+  const [imgFile, setImgFile] = useState<File | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const reInferTimerRef = useRef<number | null>(null)
+  const reInferSkipFirstRef = useRef(true)
 
-  const filteredPred = useMemo(() => {
-    if (!lastPred) return undefined
-    if (!roi.applyFilter || roi.polygon.length < 3) return lastPred
-    return {
-      ...lastPred,
-      bboxes: filterBBoxesByRoiNormalized({
-        bboxes: lastPred.bboxes,
-        roiPoly: roi.polygon,
-        width: lastPred.width,
-        height: lastPred.height,
-      }),
+  useEffect(() => {
+    return () => {
+      if (imgUrlRef.current) URL.revokeObjectURL(imgUrlRef.current)
+      imgUrlRef.current = null
+      if (reInferTimerRef.current) window.clearTimeout(reInferTimerRef.current)
     }
-  }, [lastPred, roi.applyFilter, roi.polygon])
-  const bboxes = useMemo(() => (filteredPred ? filteredPred.bboxes : []), [filteredPred])
+  }, [])
 
-  async function onPick(file?: File) {
-    if (!file) return
+  async function runInfer(file: File) {
+    if (busy) return
     setBusy(true)
     setLastPred(undefined)
-    const url = URL.createObjectURL(file)
-    setImgUrl(url)
     try {
       const pred = await apiInferImage(file)
       setLastPred(pred)
@@ -58,6 +53,48 @@ export function ImageTab() {
       setBusy(false)
     }
   }
+
+  const filteredPred = useMemo(() => {
+    if (!lastPred) return undefined
+    const classFiltered =
+      params.classFilter.length > 0 ? lastPred.bboxes.filter((b) => params.classFilter.includes(b.cls)) : lastPred.bboxes
+
+    const roiFiltered =
+      roi.applyFilter && roi.polygon.length >= 3
+        ? filterBBoxesByRoiNormalized({
+            bboxes: classFiltered,
+            roiPoly: roi.polygon,
+            width: lastPred.width,
+            height: lastPred.height,
+          })
+        : classFiltered
+
+    return { ...lastPred, bboxes: roiFiltered }
+  }, [lastPred, params.classFilter, roi.applyFilter, roi.polygon])
+  const bboxes = useMemo(() => (filteredPred ? filteredPred.bboxes : []), [filteredPred])
+
+  async function onPick(file?: File) {
+    if (!file) return
+    setLastPred(undefined)
+    setImgFile(file)
+    if (imgUrlRef.current) URL.revokeObjectURL(imgUrlRef.current)
+    const url = URL.createObjectURL(file)
+    imgUrlRef.current = url
+    setImgUrl(url)
+  }
+
+  // 阈值/类别变化：自动重新推理（对图片是“重新跑一遍模型”）
+  useEffect(() => {
+    if (reInferSkipFirstRef.current) {
+      reInferSkipFirstRef.current = false
+      return
+    }
+    if (!imgFile) return
+    if (reInferTimerRef.current) window.clearTimeout(reInferTimerRef.current)
+    reInferTimerRef.current = window.setTimeout(() => {
+      void runInfer(imgFile)
+    }, 250)
+  }, [params.conf, params.iou, params.classFilter, imgFile])
 
   return (
     <div className={styles.wrap}>
@@ -71,10 +108,16 @@ export function ImageTab() {
           />
           选择图片
         </label>
+        <NeoButton onClick={() => imgFile && void runInfer(imgFile)} disabled={!imgFile || busy}>
+          开始推理
+        </NeoButton>
         <NeoButton
           onClick={() => {
             setLastPred(undefined)
             setImgUrl(undefined)
+            setImgFile(undefined)
+            if (imgUrlRef.current) URL.revokeObjectURL(imgUrlRef.current)
+            imgUrlRef.current = null
           }}
           disabled={busy}
         >

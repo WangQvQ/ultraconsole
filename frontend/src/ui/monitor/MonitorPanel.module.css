@@ -53,6 +53,7 @@
   gap: 10px;
   padding: 4px 2px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  align-items: flex-start;
 }
 
 .level {
@@ -72,9 +73,11 @@
 
 .msg {
   color: var(--fg-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .hint {

@@ -40,17 +40,21 @@ export function WebcamTab() {
 
   const filteredPred = useMemo(() => {
     if (!lastPred) return undefined
-    if (!roi.applyFilter || roi.polygon.length < 3) return lastPred
-    return {
-      ...lastPred,
-      bboxes: filterBBoxesByRoiNormalized({
-        bboxes: lastPred.bboxes,
-        roiPoly: roi.polygon,
-        width: lastPred.width,
-        height: lastPred.height,
-      }),
-    }
-  }, [lastPred, roi.applyFilter, roi.polygon])
+    const classFiltered =
+      params.classFilter.length > 0 ? lastPred.bboxes.filter((b) => params.classFilter.includes(b.cls)) : lastPred.bboxes
+
+    const roiFiltered =
+      roi.applyFilter && roi.polygon.length >= 3
+        ? filterBBoxesByRoiNormalized({
+            bboxes: classFiltered,
+            roiPoly: roi.polygon,
+            width: lastPred.width,
+            height: lastPred.height,
+          })
+        : classFiltered
+
+    return { ...lastPred, bboxes: roiFiltered }
+  }, [lastPred, params.classFilter, roi.applyFilter, roi.polygon])
   const bboxes = useMemo(() => filteredPred?.bboxes ?? [], [filteredPred])
 
   useEffect(() => {

@@ -43,17 +43,21 @@ export function RtspTab() {
 
   const filteredPred = useMemo(() => {
     if (!lastPred) return undefined
-    if (!roi.applyFilter || roi.polygon.length < 3) return lastPred
-    return {
-      ...lastPred,
-      bboxes: filterBBoxesByRoiNormalized({
-        bboxes: lastPred.bboxes,
-        roiPoly: roi.polygon,
-        width: lastPred.width,
-        height: lastPred.height,
-      }),
-    }
-  }, [lastPred, roi.applyFilter, roi.polygon])
+    const classFiltered =
+      params.classFilter.length > 0 ? lastPred.bboxes.filter((b) => params.classFilter.includes(b.cls)) : lastPred.bboxes
+
+    const roiFiltered =
+      roi.applyFilter && roi.polygon.length >= 3
+        ? filterBBoxesByRoiNormalized({
+            bboxes: classFiltered,
+            roiPoly: roi.polygon,
+            width: lastPred.width,
+            height: lastPred.height,
+          })
+        : classFiltered
+
+    return { ...lastPred, bboxes: roiFiltered }
+  }, [lastPred, params.classFilter, roi.applyFilter, roi.polygon])
   const bboxes = useMemo(() => filteredPred?.bboxes ?? [], [filteredPred])
 
   useEffect(() => {
@@ -66,9 +70,7 @@ export function RtspTab() {
   function cleanup() {
     runningRef.current = false
     setRunning(false)
-    setWsState('idle')
     setLastPred(undefined)
-    setConnections({ rtspWs: 'idle' })
 
     const ws = wsRef.current
     wsRef.current = null
@@ -90,6 +92,8 @@ export function RtspTab() {
     } catch {
       // ignore
     }
+    setWsState('idle')
+    setConnections({ rtspWs: 'idle' })
     cleanup()
   }
 
@@ -120,12 +124,14 @@ export function RtspTab() {
       )
     }
     ws.onclose = () => {
+      if (!runningRef.current) return
       setWsState('closed')
       setConnections({ rtspWs: 'closed' })
       pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'rtsp.ws.close', msg: 'closed', fields: {} })
       cleanup()
     }
     ws.onerror = () => {
+      if (!runningRef.current) return
       setWsState('error')
       setConnections({ rtspWs: 'error' })
       pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'rtsp.ws.error', msg: 'websocket error', fields: {} })

@@ -1,6 +1,6 @@
 .shell {
   display: grid;
-  grid-template-columns: 340px 1fr 360px;
+  grid-template-columns: var(--left-w, 340px) 6px 1fr 6px var(--right-w, 360px);
   grid-template-rows: 44px 1fr;
   height: 100vh;
   background: var(--bg-0);
@@ -12,6 +12,18 @@
   grid-row: 1;
   border-bottom: 1px solid var(--line-0);
   background: var(--bg-1);
+}
+
+.left {
+  grid-column: 1;
+}
+
+.center {
+  grid-column: 3;
+}
+
+.right {
+  grid-column: 5;
 }
 
 .left,
@@ -28,27 +40,94 @@
   border-left: 1px solid var(--line-0);
 }
 
+.resizer {
+  grid-row: 2;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+}
+
+.resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.resizer:hover::before,
+.resizing .resizer::before {
+  opacity: 1;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: rgba(255, 255, 255, 0.10);
+}
+
 .center {
   position: relative;
-  overflow: hidden;
+  overflow: auto;
   padding: var(--s-16);
   grid-row: 2;
+  min-height: 0;
 }
 
 @media (max-width: 1400px) {
   .shell {
-    grid-template-columns: 320px 1fr 320px;
+    grid-template-columns: var(--left-w, 320px) 6px 1fr 6px var(--right-w, 320px);
   }
 }
 
 @media (max-width: 1100px) {
   .shell {
     grid-template-columns: 300px 1fr;
-    grid-template-rows: 44px 1fr 280px;
+    grid-template-rows: 44px 1fr 8px var(--bottom-h, 280px);
+  }
+  .resizer {
+    display: none;
+  }
+  .vResizer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    height: 8px;
+    cursor: row-resize;
+    background: transparent;
+    position: relative;
+  }
+  .vResizer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.03);
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .vResizer:hover::before,
+  .resizing .vResizer::before {
+    opacity: 1;
+  }
+  .vResizer::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-0.5px);
+    background: rgba(255, 255, 255, 0.10);
   }
   .right {
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 4;
     border-left: none;
     border-top: 1px solid var(--line-0);
   }

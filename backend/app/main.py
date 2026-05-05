@@ -256,21 +256,28 @@ async def ws_stream(ws: WebSocket):
     await ws.accept()
     loop = asyncio.get_running_loop()
 
-    stop_event = threading.Event()
     worker: Optional[threading.Thread] = None
+    worker_stop: Optional[threading.Event] = None
 
     async def send_log(level: str, event: str, msg: str, fields: Optional[Dict[str, Any]] = None):
         entry = state.logs.append(level=level, event=event, msg=msg, fields=fields or {})
         await ws.send_json({"type": "log", **entry.model_dump()})
 
     def start_rtsp_worker(url: str, fps: float, conf: float, iou: float, class_filter: list[str]):
-        nonlocal worker
+        nonlocal worker, worker_stop
 
         def run():
+            stop_ev = worker_stop
+
             def safe_submit(coro):
-                fut = asyncio.run_coroutine_threadsafe(coro, loop)
-                # swallow exceptions (e.g. ws closed)
-                fut.add_done_callback(lambda f: f.exception())
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(coro, loop)
+                    # swallow exceptions (e.g. ws closed)
+                    fut.add_done_callback(lambda f: f.exception())
+                except Exception:
+                    # loop closed / scheduling failed -> stop worker
+                    if stop_ev is not None:
+                        stop_ev.set()
 
             cap = cv2.VideoCapture(url)
             if not cap.isOpened():
@@ -284,7 +291,7 @@ async def ws_stream(ws: WebSocket):
             frame_seq = 0
             last_pred_perf: Optional[float] = None
 
-            while not stop_event.is_set():
+            while stop_ev is not None and not stop_ev.is_set():
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     asyncio.run_coroutine_threadsafe(
@@ -352,10 +359,12 @@ async def ws_stream(ws: WebSocket):
             safe_submit(send_log("INFO", "rtsp.stopped", "RTSP stopped"))
 
         # stop previous
+        if worker_stop is not None:
+            worker_stop.set()
         if worker is not None and worker.is_alive():
-            stop_event.set()
             worker.join(timeout=2)
-            stop_event.clear()
+
+        worker_stop = threading.Event()
 
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
@@ -379,20 +388,22 @@ async def ws_stream(ws: WebSocket):
                 continue
 
             if mtype == "rtsp.stop":
-                stop_event.set()
+                if worker_stop is not None:
+                    worker_stop.set()
                 if worker is not None:
                     worker.join(timeout=2)
-                stop_event.clear()
                 await send_log("INFO", "rtsp.stop", "Stopped by client")
                 continue
 
     except WebSocketDisconnect:
-        stop_event.set()
+        if worker_stop is not None:
+            worker_stop.set()
         if worker is not None:
             worker.join(timeout=2)
         state.logs.append(level="INFO", event="ws.stream.disconnect", msg="Client disconnected")
     except Exception as e:
-        stop_event.set()
+        if worker_stop is not None:
+            worker_stop.set()
         if worker is not None:
             worker.join(timeout=2)
         state.logs.append(level="ERROR", event="ws.stream.crash", msg=str(e))
