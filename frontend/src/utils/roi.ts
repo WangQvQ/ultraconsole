@@ -8,7 +8,8 @@ export function pointInPolygon(p: RoiPoint, poly: RoiPoint[]) {
     const yi = poly[i].y
     const xj = poly[j].x
     const yj = poly[j].y
-    const intersect = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi + 1e-12) + xi
+    // yi > p.y !== yj > p.y 已经排除了 yi == yj 的水平边情况，分母不会为 0
+    const intersect = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi
     if (intersect) inside = !inside
   }
   return inside

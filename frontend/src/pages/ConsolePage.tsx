@@ -5,10 +5,14 @@ import { SystemStatusBar } from '../ui/status/SystemStatusBar'
 import { ViewerPanel } from '../ui/viewer/ViewerPanel'
 import styles from './ConsolePage.module.css'
 
+const clampLeft = (n: number) => Math.max(240, Math.min(560, Number.isFinite(n) ? n : 340))
+const clampRight = (n: number) => Math.max(260, Math.min(620, Number.isFinite(n) ? n : 360))
+const clampBottom = (n: number) => Math.max(180, Math.min(560, Number.isFinite(n) ? n : 280))
+
 export function ConsolePage() {
-  const [leftW, setLeftW] = useState<number>(() => Number(localStorage.getItem('layout.leftW') || 340))
-  const [rightW, setRightW] = useState<number>(() => Number(localStorage.getItem('layout.rightW') || 360))
-  const [bottomH, setBottomH] = useState<number>(() => Number(localStorage.getItem('layout.bottomH') || 280))
+  const [leftW, setLeftW] = useState<number>(() => clampLeft(Number(localStorage.getItem('layout.leftW') || 340)))
+  const [rightW, setRightW] = useState<number>(() => clampRight(Number(localStorage.getItem('layout.rightW') || 360)))
+  const [bottomH, setBottomH] = useState<number>(() => clampBottom(Number(localStorage.getItem('layout.bottomH') || 280)))
   const [resizing, setResizing] = useState<'left' | 'right' | 'bottom' | null>(null)
 
   const dragRef = useRef<{
@@ -20,26 +24,21 @@ export function ConsolePage() {
     startBottomH: number
   } | null>(null)
 
-  const shellStyle = useMemo(() => {
-    const lw = Math.max(240, Math.min(560, Number.isFinite(leftW) ? leftW : 340))
-    const rw = Math.max(260, Math.min(620, Number.isFinite(rightW) ? rightW : 360))
-    const bh = Math.max(180, Math.min(560, Number.isFinite(bottomH) ? bottomH : 280))
-    return { ['--left-w' as any]: `${lw}px`, ['--right-w' as any]: `${rw}px`, ['--bottom-h' as any]: `${bh}px` }
-  }, [leftW, rightW, bottomH])
+  const shellStyle = useMemo(
+    () => ({ ['--left-w' as any]: `${leftW}px`, ['--right-w' as any]: `${rightW}px`, ['--bottom-h' as any]: `${bottomH}px` }),
+    [leftW, rightW, bottomH],
+  )
 
   useEffect(() => {
-    const lw = Math.max(240, Math.min(560, Number.isFinite(leftW) ? leftW : 340))
-    localStorage.setItem('layout.leftW', String(lw))
+    localStorage.setItem('layout.leftW', String(leftW))
   }, [leftW])
 
   useEffect(() => {
-    const rw = Math.max(260, Math.min(620, Number.isFinite(rightW) ? rightW : 360))
-    localStorage.setItem('layout.rightW', String(rw))
+    localStorage.setItem('layout.rightW', String(rightW))
   }, [rightW])
 
   useEffect(() => {
-    const bh = Math.max(180, Math.min(560, Number.isFinite(bottomH) ? bottomH : 280))
-    localStorage.setItem('layout.bottomH', String(bh))
+    localStorage.setItem('layout.bottomH', String(bottomH))
   }, [bottomH])
 
   useEffect(() => {
@@ -47,16 +46,16 @@ export function ConsolePage() {
       if (!dragRef.current) return
       const dx = ev.clientX - dragRef.current.startX
       const dy = ev.clientY - dragRef.current.startY
-      if (dragRef.current.kind === 'left') setLeftW(dragRef.current.startLeftW + dx)
-      else if (dragRef.current.kind === 'right') setRightW(dragRef.current.startRightW - dx)
-      else setBottomH(dragRef.current.startBottomH - dy)
+      if (dragRef.current.kind === 'left') setLeftW(clampLeft(dragRef.current.startLeftW + dx))
+      else if (dragRef.current.kind === 'right') setRightW(clampRight(dragRef.current.startRightW - dx))
+      else setBottomH(clampBottom(dragRef.current.startBottomH - dy))
     }
     const onUp = () => {
       dragRef.current = null
       setResizing(null)
     }
     window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp, { once: false })
+    window.addEventListener('pointerup', onUp)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)

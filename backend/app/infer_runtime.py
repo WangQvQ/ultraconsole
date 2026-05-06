@@ -34,6 +34,8 @@ class UltralyticsRuntime:
         self._models_dir = models_dir
         self._loaded: Optional[LoadedModel] = None
         self._lock = threading.RLock()
+        # YOLO.predict 不保证线程安全：用 predict_lock 串行化推理
+        self._predict_lock = threading.Lock()
 
     def list_models(self) -> list[tuple[str, str]]:
         if not os.path.isdir(self._models_dir):
@@ -46,21 +48,37 @@ class UltralyticsRuntime:
         return out
 
     def load(self, model_id: str, device: str) -> LoadedModel:
+        # 已经加载过且同一文件：直接复用，避免重读权重
+        with self._lock:
+            cur = self._loaded
+        if cur is not None and cur.id == model_id:
+            try:
+                self._warmup(loaded=cur, device=device)
+            except Exception:
+                pass
+            return cur
+
         path = os.path.join(self._models_dir, model_id)
         yolo = YOLO(path)
-        # ultralytics 支持传入 device 到 predict；这里先不做全局绑定
         names = {str(k): str(v) for k, v in getattr(yolo.model, "names", getattr(yolo, "names", {})).items()}
         task_type = _guess_task_type(yolo)
         loaded = LoadedModel(id=model_id, filename=model_id, task_type=task_type, names=names, yolo=yolo)
-        # 轻量 warmup：做一次空推理（如果有 device）
+        # warmup 失败不阻断 load，但忠实落库当前模型
         try:
-            _ = self._warmup(loaded=loaded, device=device)
+            self._warmup(loaded=loaded, device=device)
         except Exception:
-            # warmup 失败不阻断
             pass
         with self._lock:
             self._loaded = loaded
         return loaded
+
+    def warmup_current(self, device: str) -> None:
+        """切换 device 时仅做一次空推理预热，不重新读权重。"""
+        with self._lock:
+            loaded = self._loaded
+        if loaded is None:
+            return
+        self._warmup(loaded=loaded, device=device)
 
     def current(self) -> Optional[LoadedModel]:
         with self._lock:
@@ -68,7 +86,8 @@ class UltralyticsRuntime:
 
     def _warmup(self, *, loaded: LoadedModel, device: str) -> None:
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        _ = loaded.yolo.predict(dummy, verbose=False, device=device, conf=0.25, iou=0.7)
+        with self._predict_lock:
+            _ = loaded.yolo.predict(dummy, verbose=False, device=device, conf=0.25, iou=0.7)
 
     def infer_image(
         self,
@@ -88,13 +107,14 @@ class UltralyticsRuntime:
         rgb = image.convert("RGB")
         np_img = np.array(rgb)
         t1 = time.perf_counter()
-        results = loaded.yolo.predict(
-            np_img,
-            verbose=False,
-            device=device,
-            conf=conf,
-            iou=iou,
-        )
+        with self._predict_lock:
+            results = loaded.yolo.predict(
+                np_img,
+                verbose=False,
+                device=device,
+                conf=conf,
+                iou=iou,
+            )
         t2 = time.perf_counter()
 
         r0 = results[0]

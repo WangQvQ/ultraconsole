@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Optional, Dict
 
 import cv2
@@ -26,7 +28,23 @@ from .schemas import (
 from .state import AppState
 
 
-MODELS_DIR = os.environ.get("ULTRA_MODELS_DIR", os.path.join(os.getcwd(), "models"))
+_DEFAULT_MODELS_DIR = str(Path(__file__).resolve().parent.parent / "models")
+MODELS_DIR = os.environ.get("ULTRA_MODELS_DIR", _DEFAULT_MODELS_DIR)
+_MODELS_DIR_REAL = os.path.realpath(MODELS_DIR)
+_VALID_MODEL_EXTS = (".pt", ".onnx", ".engine")
+
+
+def _validated_model_id(model_id: str) -> str:
+    """防路径穿越：只允许 models 目录直接子文件，且后缀合法。"""
+    fn = os.path.basename(model_id or "")
+    if not fn or fn != model_id:
+        raise ValueError(f"Invalid modelId: {model_id!r}")
+    if not fn.endswith(_VALID_MODEL_EXTS):
+        raise ValueError(f"Unsupported model extension: {fn}")
+    full = os.path.realpath(os.path.join(_MODELS_DIR_REAL, fn))
+    if os.path.dirname(full) != _MODELS_DIR_REAL:
+        raise ValueError(f"Model path escapes models dir: {model_id!r}")
+    return fn
 
 app = FastAPI(title="Ultralytics Infer Console API", version="0.1.0")
 state = AppState()
@@ -64,48 +82,57 @@ def list_models() -> list[ModelInfo]:
             )
         )
 
-    # 如果当前已加载，则回填真实信息
+    # 如果当前已加载，则回填真实信息（taskType / names）
     cur = runtime.current()
     if cur is not None:
-        for i in range(len(out)):
-            if out[i].id == cur.id:
+        for i, m in enumerate(out):
+            if m.id == cur.id:
                 out[i] = ModelInfo(id=cur.id, filename=cur.filename, taskType=cur.task_type, names=cur.names)
                 break
-        else:
-            out.insert(0, ModelInfo(id=cur.id, filename=cur.filename, taskType=cur.task_type, names=cur.names))
     return out
 
 
 @app.post("/api/models/select", response_model=ModelInfo)
-def select_model(req: SelectModelRequest) -> ModelInfo:
+async def select_model(req: SelectModelRequest) -> ModelInfo:
+    state.logs.append(level="INFO", event="model.select", msg=f"Selecting model: {req.modelId}")
+    try:
+        model_id = _validated_model_id(req.modelId)
+    except ValueError as e:
+        state.logs.append(level="ERROR", event="model.invalid", msg=str(e), fields={"modelId": req.modelId})
+        raise HTTPException(status_code=400, detail=str(e))
+
+    device = _device_str(state.engine.device)
+    try:
+        loaded = await asyncio.to_thread(runtime.load, model_id, device)
+    except Exception as e:
+        state.logs.append(level="ERROR", event="model.load_failed", msg=str(e), fields={"modelId": model_id})
+        raise HTTPException(status_code=400, detail=str(e))
+
     with state.lock:
-        state.logs.append(level="INFO", event="model.select", msg=f"Selecting model: {req.modelId}")
-        try:
-            loaded = runtime.load(req.modelId, device=_device_str(state.engine.device))
-            state.model_id = loaded.id
-            state.logs.append(level="INFO", event="model.loaded", msg=f"Loaded model: {loaded.id}", fields={"task": loaded.task_type})
-            return ModelInfo(id=loaded.id, filename=loaded.filename, taskType=loaded.task_type, names=loaded.names)
-        except Exception as e:
-            state.logs.append(level="ERROR", event="model.load_failed", msg=str(e), fields={"modelId": req.modelId})
-            raise HTTPException(status_code=400, detail=str(e))
+        state.model_id = loaded.id
+    state.logs.append(level="INFO", event="model.loaded", msg=f"Loaded model: {loaded.id}", fields={"task": loaded.task_type})
+    return ModelInfo(id=loaded.id, filename=loaded.filename, taskType=loaded.task_type, names=loaded.names)
 
 
 @app.post("/api/engine/select")
-def select_engine(req: SelectEngineRequest) -> dict[str, Any]:
+async def select_engine(req: SelectEngineRequest) -> dict[str, Any]:
     with state.lock:
+        same = state.engine.device == req.device
         state.engine.device = req.device
-        state.engine.warming = True
-        state.logs.append(level="INFO", event="engine.select", msg=f"Switching engine: {req.device}")
+        state.engine.warming = not same
+    state.logs.append(level="INFO", event="engine.select", msg=f"Switching engine: {req.device}")
 
-        # 轻量 warmup：如有模型则触发一次 warmup
+    if not same:
         cur = runtime.current()
         if cur is not None:
             try:
-                runtime.load(cur.id, device=_device_str(req.device))
+                # 仅 warmup（不重 load 权重）：用目标 device 跑一次空推理
+                await asyncio.to_thread(runtime.warmup_current, _device_str(req.device))
             except Exception as e:
                 state.logs.append(level="WARN", event="engine.warmup_failed", msg=str(e))
+        with state.lock:
+            state.engine.warming = False
 
-        state.engine.warming = False
     return {"ok": True, "device": req.device, "warming": False}
 
 
@@ -122,6 +149,22 @@ def update_params(req: UpdateParamsRequest) -> Params:
         return state.params
 
 
+def _decode_image(raw: bytes) -> Image.Image:
+    img = Image.open(io.BytesIO(raw))
+    img.load()
+    return img
+
+
+def _run_infer(image: Image.Image, conf: float, iou: float, class_filter: list[str]) -> PredResponse:
+    return runtime.infer_image(
+        image=image,
+        device=_device_str(state.engine.device),
+        conf=conf,
+        iou=iou,
+        class_filter=class_filter,
+    )
+
+
 @app.post("/api/infer/image", response_model=PredResponse)
 async def infer_image(file: UploadFile = File(...)) -> PredResponse:
     cur = runtime.current()
@@ -133,20 +176,14 @@ async def infer_image(file: UploadFile = File(...)) -> PredResponse:
 
     raw = await file.read()
     try:
-        img = Image.open(io_bytes(raw))
+        img = await asyncio.to_thread(_decode_image, raw)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
 
     p = state.params
     t0 = time.time()
     try:
-        pred = runtime.infer_image(
-            image=img,
-            device=_device_str(state.engine.device),
-            conf=p.conf,
-            iou=p.iou,
-            class_filter=p.classFilter,
-        )
+        pred = await asyncio.to_thread(_run_infer, img, p.conf, p.iou, list(p.classFilter))
         state.logs.append(level="INFO", event="infer.image", msg="Image inferred", fields={"dtMs": int((time.time() - t0) * 1000)})
         return pred
     except Exception as e:
@@ -156,9 +193,7 @@ async def infer_image(file: UploadFile = File(...)) -> PredResponse:
 
 @app.post("/api/infer/frame", response_model=PredResponse)
 async def infer_frame(file: UploadFile = File(...)) -> PredResponse:
-    """
-    Video 抽帧推理专用：允许 image/jpeg（以及其它 image/*），返回 PredResponse。
-    """
+    """Video 抽帧推理专用：允许 image/jpeg（以及其它 image/*），返回 PredResponse。"""
     return await infer_image(file=file)
 
 
@@ -166,12 +201,6 @@ async def infer_frame(file: UploadFile = File(...)) -> PredResponse:
 def export_logs_csv() -> PlainTextResponse:
     csv_text = state.logs.export_csv()
     return PlainTextResponse(csv_text, media_type="text/csv")
-
-
-def io_bytes(b: bytes):
-    import io
-
-    return io.BytesIO(b)
 
 
 @app.websocket("/ws/infer")
@@ -182,6 +211,7 @@ async def ws_infer(ws: WebSocket):
     latest_frame: Optional[Dict[str, Any]] = None
     processing = False
     last_pred_perf: Optional[float] = None
+    no_model_logged = False
 
     async def send_log(level: str, event: str, msg: str, fields: Optional[Dict[str, Any]] = None):
         entry = state.logs.append(level=level, event=event, msg=msg, fields=fields or {})
@@ -192,8 +222,6 @@ async def ws_infer(ws: WebSocket):
             msg = await ws.receive_json()
             mtype = msg.get("type")
             if mtype == "params":
-                # V1：仅记录，不强制覆盖全局 params（避免多人连接互相覆盖）
-                await send_log("INFO", "ws.params", "Received params override")
                 continue
 
             if mtype != "frame":
@@ -210,8 +238,11 @@ async def ws_infer(ws: WebSocket):
 
                 cur = runtime.current()
                 if cur is None:
-                    await send_log("ERROR", "infer.no_model", "No model loaded")
+                    if not no_model_logged:
+                        await send_log("ERROR", "infer.no_model", "No model loaded")
+                        no_model_logged = True
                     continue
+                no_model_logged = False
 
                 frame_id = str(frame.get("frameId", ""))
                 ts = float(frame.get("ts", time.time()))
@@ -221,15 +252,12 @@ async def ws_infer(ws: WebSocket):
 
                 try:
                     raw = base64.b64decode(b64)
-                    img = Image.open(io_bytes(raw))
+                    img = await asyncio.to_thread(_decode_image, raw)
                     p = state.params
-                    pred = runtime.infer_image(
-                        image=img,
-                        device=_device_str(state.engine.device),
-                        conf=float(frame.get("conf", p.conf)),
-                        iou=float(frame.get("iou", p.iou)),
-                        class_filter=list(frame.get("classFilter", p.classFilter)),
-                    )
+                    conf = float(frame.get("conf", p.conf))
+                    iou = float(frame.get("iou", p.iou))
+                    class_filter = list(frame.get("classFilter", p.classFilter))
+                    pred = await asyncio.to_thread(_run_infer, img, conf, iou, class_filter)
                     now_perf = time.perf_counter()
                     if last_pred_perf is not None:
                         dt = max(1e-6, now_perf - last_pred_perf)
@@ -266,18 +294,22 @@ async def ws_stream(ws: WebSocket):
     def start_rtsp_worker(url: str, fps: float, conf: float, iou: float, class_filter: list[str]):
         nonlocal worker, worker_stop
 
-        def run():
-            stop_ev = worker_stop
+        # stop previous（先停旧的，再起新的）
+        if worker_stop is not None:
+            worker_stop.set()
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=2)
 
+        stop_ev = threading.Event()
+        worker_stop = stop_ev
+
+        def run():
             def safe_submit(coro):
                 try:
                     fut = asyncio.run_coroutine_threadsafe(coro, loop)
-                    # swallow exceptions (e.g. ws closed)
                     fut.add_done_callback(lambda f: f.exception())
                 except Exception:
-                    # loop closed / scheduling failed -> stop worker
-                    if stop_ev is not None:
-                        stop_ev.set()
+                    stop_ev.set()
 
             cap = cv2.VideoCapture(url)
             if not cap.isOpened():
@@ -291,80 +323,70 @@ async def ws_stream(ws: WebSocket):
             frame_seq = 0
             last_pred_perf: Optional[float] = None
 
-            while stop_ev is not None and not stop_ev.is_set():
-                ok, frame = cap.read()
-                if not ok or frame is None:
-                    asyncio.run_coroutine_threadsafe(
-                        send_log("ERROR", "rtsp.read_failed", "RTSP read failed", {"url": url}),
-                        loop,
+            try:
+                while not stop_ev.is_set():
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        safe_submit(send_log("ERROR", "rtsp.read_failed", "RTSP read failed", {"url": url}))
+                        break
+
+                    now = time.time()
+                    if now - last_sent < min_interval:
+                        # 节流：丢掉这帧但短暂让出 CPU
+                        continue
+                    last_sent = now
+
+                    h, w = frame.shape[:2]
+                    ok2, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                    if not ok2:
+                        continue
+                    jpeg_bytes = buf.tobytes()
+                    jpeg_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
+                    frame_id = str(frame_seq)
+                    frame_seq += 1
+
+                    safe_submit(
+                        ws.send_json(
+                            {
+                                "type": "frame",
+                                "frameId": frame_id,
+                                "ts": now,
+                                "imageJpegBase64": jpeg_b64,
+                                "width": int(w),
+                                "height": int(h),
+                            }
+                        ),
                     )
-                    break
 
-                now = time.time()
-                if now - last_sent < min_interval:
-                    continue
-                last_sent = now
+                    cur = runtime.current()
+                    if cur is None:
+                        # 没模型时不刷屏：报一次后退出 worker
+                        safe_submit(send_log("ERROR", "infer.no_model", "No model loaded; stopping RTSP"))
+                        break
 
-                h, w = frame.shape[:2]
-                # JPEG encode (BGR)
-                ok2, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-                if not ok2:
-                    continue
-                jpeg_bytes = buf.tobytes()
-                jpeg_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
-                frame_id = str(frame_seq)
-                frame_seq += 1
-
-                # send frame first
-                safe_submit(
-                    ws.send_json(
-                        {
-                            "type": "frame",
-                            "frameId": frame_id,
-                            "ts": now,
-                            "imageJpegBase64": jpeg_b64,
-                            "width": int(w),
-                            "height": int(h),
-                        }
-                    ),
-                )
-
-                cur = runtime.current()
-                if cur is None:
-                    safe_submit(send_log("ERROR", "infer.no_model", "No model loaded"))
-                    continue
-
-                try:
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    img = Image.fromarray(np.asarray(rgb))
-                    pred = runtime.infer_image(
-                        image=img,
-                        device=_device_str(state.engine.device),
-                        conf=conf,
-                        iou=iou,
-                        class_filter=class_filter,
-                    )
-                    now_perf = time.perf_counter()
-                    if last_pred_perf is not None:
-                        dt = max(1e-6, now_perf - last_pred_perf)
-                        pred.telemetry.fps = 1.0 / dt
-                    last_pred_perf = now_perf
-                    pred.frameId = frame_id
-                    pred.ts = now
-                    safe_submit(ws.send_json({"type": "pred", **pred.model_dump()}))
-                except Exception as e:
-                    safe_submit(send_log("ERROR", "infer.rtsp_failed", str(e), {"frameId": frame_id}))
-
-            cap.release()
-            safe_submit(send_log("INFO", "rtsp.stopped", "RTSP stopped"))
-
-        # stop previous
-        if worker_stop is not None:
-            worker_stop.set()
-        if worker is not None and worker.is_alive():
-            worker.join(timeout=2)
-
-        worker_stop = threading.Event()
+                    try:
+                        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        img = Image.fromarray(np.asarray(rgb))
+                        pred = runtime.infer_image(
+                            image=img,
+                            device=_device_str(state.engine.device),
+                            conf=conf,
+                            iou=iou,
+                            class_filter=class_filter,
+                        )
+                        now_perf = time.perf_counter()
+                        if last_pred_perf is not None:
+                            dt = max(1e-6, now_perf - last_pred_perf)
+                            pred.telemetry.fps = 1.0 / dt
+                        last_pred_perf = now_perf
+                        pred.frameId = frame_id
+                        pred.ts = now
+                        safe_submit(ws.send_json({"type": "pred", **pred.model_dump()}))
+                    except Exception as e:
+                        safe_submit(send_log("ERROR", "infer.rtsp_failed", str(e), {"frameId": frame_id}))
+            finally:
+                cap.release()
+                safe_submit(send_log("INFO", "rtsp.stopped", "RTSP stopped"))
 
         worker = threading.Thread(target=run, daemon=True)
         worker.start()

@@ -62,9 +62,23 @@ export function RtspTab() {
 
   useEffect(() => {
     return () => {
-      stop()
+      // 卸载清理：仅触碰 ref / 关闭 ws / 释放 blob URL，不再 setState
+      runningRef.current = false
+      const ws = wsRef.current
+      wsRef.current = null
+      try {
+        ws?.send(JSON.stringify({ type: 'rtsp.stop' }))
+      } catch {
+        // ignore
+      }
+      try {
+        ws?.close()
+      } catch {
+        // ignore
+      }
+      if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current)
+      frameUrlRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function cleanup() {

@@ -28,6 +28,8 @@ export function ImageTab() {
   const imgUrlRef = useRef<string | null>(null)
   const [imgFile, setImgFile] = useState<File | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const pendingReInferRef = useRef(false)
   const reInferTimerRef = useRef<number | null>(null)
   const reInferSkipFirstRef = useRef(true)
 
@@ -40,7 +42,12 @@ export function ImageTab() {
   }, [])
 
   async function runInfer(file: File) {
-    if (busy) return
+    if (busyRef.current) {
+      // 已经在跑：标记为有挂起请求，跑完后用最新参数补一次
+      pendingReInferRef.current = true
+      return
+    }
+    busyRef.current = true
     setBusy(true)
     setLastPred(undefined)
     try {
@@ -50,7 +57,12 @@ export function ImageTab() {
     } catch (e) {
       pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'infer.image_failed', msg: String(e), fields: {} })
     } finally {
+      busyRef.current = false
       setBusy(false)
+      if (pendingReInferRef.current) {
+        pendingReInferRef.current = false
+        void runInfer(file)
+      }
     }
   }
 

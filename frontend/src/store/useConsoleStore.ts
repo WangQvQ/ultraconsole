@@ -149,9 +149,14 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
     })),
 
   pushLog: (entry) =>
-    set((s) => ({
-      logs: [...s.logs.slice(-999), entry],
-    })),
+    set((s) => {
+      const MAX = 1000
+      if (s.logs.length < MAX) return { logs: [...s.logs, entry] }
+      // 已满：截掉最旧的一条
+      const next = s.logs.slice(s.logs.length - MAX + 1)
+      next.push(entry)
+      return { logs: next }
+    }),
 
   setAlert: (p) => set({ alert: { ...get().alert, ...p } }),
   setAlertConfig: (p) => set({ alertConfig: { ...get().alertConfig, ...p } }),

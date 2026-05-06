@@ -67,9 +67,20 @@ export function WebcamTab() {
 
   useEffect(() => {
     return () => {
-      void stopAll()
+      // 卸载清理：仅触碰 ref / 关流，避免在已卸载组件上 setState
+      inferRunningRef.current = false
+      const ws = wsRef.current
+      wsRef.current = null
+      try {
+        ws?.close()
+      } catch {
+        // ignore
+      }
+      const video = videoRef.current
+      const stream = (video?.srcObject ?? null) as MediaStream | null
+      if (stream) for (const t of stream.getTracks()) t.stop()
+      if (video) video.srcObject = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function startPreview() {
@@ -158,12 +169,31 @@ export function WebcamTab() {
 
     let lastSent = 0
     let frameSeq = 0
+    let encoding = false
+    const MAX_BUFFERED = 1_000_000 // 背压：>1MB 已缓冲就丢这帧
+
+    const blobToBase64 = (blob: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        const fr = new FileReader()
+        fr.onload = () => {
+          const r = String(fr.result || '')
+          resolve(r.split(',')[1] || '')
+        }
+        fr.onerror = () => reject(fr.error)
+        fr.readAsDataURL(blob)
+      })
 
     const tick = () => {
       if (!inferRunningRef.current) return
       const now = performance.now()
       const minInterval = 1000 / Math.max(1, targetFpsRef.current)
-      if (ws.readyState === WebSocket.OPEN && video.readyState >= 2 && now - lastSent >= minInterval) {
+      const ready =
+        ws.readyState === WebSocket.OPEN &&
+        video.readyState >= 2 &&
+        now - lastSent >= minInterval &&
+        !encoding &&
+        ws.bufferedAmount < MAX_BUFFERED
+      if (ready) {
         lastSent = now
         const w = video.videoWidth || 640
         const h = video.videoHeight || 480
@@ -173,21 +203,38 @@ export function WebcamTab() {
         const ctx = c.getContext('2d')
         if (ctx) {
           ctx.drawImage(video, 0, 0, w, h)
-          const dataUrl = c.toDataURL('image/jpeg', 0.75)
-          const b64 = dataUrl.split(',')[1] || ''
-          const p = paramsRef.current
-          ws.send(
-            JSON.stringify({
-              type: 'frame',
-              frameId: String(frameSeq++),
-              ts: Date.now() / 1000,
-              imageJpegBase64: b64,
-              width: w,
-              height: h,
-              conf: p.conf,
-              iou: p.iou,
-              classFilter: p.classFilter,
-            }),
+          encoding = true
+          c.toBlob(
+            (blob) => {
+              if (!blob || !inferRunningRef.current || ws.readyState !== WebSocket.OPEN) {
+                encoding = false
+                return
+              }
+              blobToBase64(blob)
+                .then((b64) => {
+                  if (!inferRunningRef.current || ws.readyState !== WebSocket.OPEN) return
+                  const p = paramsRef.current
+                  ws.send(
+                    JSON.stringify({
+                      type: 'frame',
+                      frameId: String(frameSeq++),
+                      ts: Date.now() / 1000,
+                      imageJpegBase64: b64,
+                      width: w,
+                      height: h,
+                      conf: p.conf,
+                      iou: p.iou,
+                      classFilter: p.classFilter,
+                    }),
+                  )
+                })
+                .catch(() => {})
+                .finally(() => {
+                  encoding = false
+                })
+            },
+            'image/jpeg',
+            0.75,
           )
         }
       }

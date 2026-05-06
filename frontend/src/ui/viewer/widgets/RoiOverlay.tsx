@@ -210,7 +210,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
     <canvas
       ref={canvasRef}
       className={styles.canvas}
-      onMouseMove={(e) => {
+      onPointerMove={(e) => {
         if (roi.closed) return
         const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
         const anchor = props.anchorRef.current
@@ -221,9 +221,12 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
         const p = displayToSrcNorm(dx, dy, rect.width, rect.height, src.w, src.h)
         setPreview(p ?? undefined)
       }}
-      onMouseLeave={() => setPreview(undefined)}
-      onClick={(e) => {
+      onPointerLeave={() => setPreview(undefined)}
+      onPointerCancel={() => setPreview(undefined)}
+      onPointerDown={(e) => {
         if (roi.closed) return
+        // 仅左键 / 触摸：忽略中右键
+        if (e.pointerType === 'mouse' && e.button !== 0) return
         const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
         const anchor = props.anchorRef.current
         const src = getSourceSize(anchor)
@@ -233,7 +236,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
         const p = displayToSrcNorm(dx, dy, rect.width, rect.height, src.w, src.h)
         if (!p) return
 
-        // 点击第一个点附近 => 自动闭合（更好用）
+        // 点击第一个点附近 => 自动闭合
         const poly2 = normalizePoly(roi.polygon)
         if (poly2.length >= 3) {
           const first = poly2[0]

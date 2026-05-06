@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiListModels, apiSelectEngine, apiSelectModel, apiUpdateParams } from '../../api/client'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { Card } from '../primitives/Card'
@@ -48,13 +48,28 @@ export function ControlPanel() {
     }
   }
 
-  async function flushParams(next: { conf: number; iou: number; classFilter: string[] }) {
-    try {
-      await apiUpdateParams(next)
-    } catch (e) {
-      pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'params.sync_failed', msg: String(e), fields: {} })
-    }
+  // 滑动条/标签变更要防抖到后端，避免几十次/秒的 /api/params 请求
+  const flushTimerRef = useRef<number | null>(null)
+  const pendingParamsRef = useRef<{ conf: number; iou: number; classFilter: string[] } | null>(null)
+  function flushParams(next: { conf: number; iou: number; classFilter: string[] }) {
+    pendingParamsRef.current = next
+    if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current)
+    flushTimerRef.current = window.setTimeout(async () => {
+      const p = pendingParamsRef.current
+      pendingParamsRef.current = null
+      if (!p) return
+      try {
+        await apiUpdateParams(p)
+      } catch (e) {
+        pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'params.sync_failed', msg: String(e), fields: {} })
+      }
+    }, 200)
   }
+  useEffect(() => {
+    return () => {
+      if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current)
+    }
+  }, [])
 
   return (
     <div className={styles.stack}>
@@ -106,7 +121,7 @@ export function ControlPanel() {
               const conf = Number(e.target.value)
               const next = { ...params, conf }
               setParams({ conf })
-              void flushParams(next)
+              flushParams(next)
             }}
           />
         </div>
@@ -127,7 +142,7 @@ export function ControlPanel() {
               const iou = Number(e.target.value)
               const next = { ...params, iou }
               setParams({ iou })
-              void flushParams(next)
+              flushParams(next)
             }}
           />
         </div>
@@ -148,7 +163,7 @@ export function ControlPanel() {
                     const classFilter = active ? params.classFilter.filter((x) => x !== c) : [...params.classFilter, c]
                     const next = { ...params, classFilter }
                     setParams({ classFilter })
-                    void flushParams(next)
+                    flushParams(next)
                   }}
                 >
                   {c}
