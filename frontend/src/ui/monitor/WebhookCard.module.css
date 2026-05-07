@@ -1,0 +1,88 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-1);
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.input,
+.select,
+.num {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-0);
+  border: 1px solid var(--line-0);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.num {
+  width: 80px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag {
+  cursor: pointer;
+  border: 1px solid var(--line-0);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-1);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.tagOn {
+  border-color: rgba(76, 255, 122, 0.45);
+  color: rgba(76, 255, 122, 0.95);
+  background: rgba(76, 255, 122, 0.06);
+}
+
+.actionsRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.testStatus {
+  font-size: 11px;
+  color: var(--fg-2);
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--fg-2);
+}

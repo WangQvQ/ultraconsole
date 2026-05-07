@@ -173,6 +173,27 @@ export function ControlPanel() {
           </div>
         )}
       </Card>
+
+      <Card title="Tracking & Events" right={params.track ? 'on' : 'off'}>
+        <label className={styles.toggleRow}>
+          <input
+            type="checkbox"
+            checked={params.track}
+            onChange={(e) => {
+              const track = e.target.checked
+              const next = { ...params, track }
+              setParams({ track })
+              flushParams(next)
+            }}
+          />
+          启用 ByteTrack 跟踪（Webcam / RTSP）
+        </label>
+        <div className={styles.hint}>
+          开启后 bbox 会带 trackId、轨迹 & 计数线/区域生效。
+          <br />
+          画线/区域：在画面右键菜单切换"Line / Zone"工具，或使用 ROI 工具旁的快捷按钮。
+        </div>
+      </Card>
     </div>
   )
 }

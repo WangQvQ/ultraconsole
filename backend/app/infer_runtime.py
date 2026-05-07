@@ -10,7 +10,16 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
-from .schemas import PredBBox, PredResponse, TaskType, Telemetry
+from .schemas import (
+    PredBBox,
+    PredInstanceKeypoints,
+    PredKeypoint,
+    PredMask,
+    PredResponse,
+    TaskType,
+    Telemetry,
+)
+from .system_stats import record_latency
 
 
 @dataclass(frozen=True)
@@ -27,6 +36,14 @@ def _guess_task_type(yolo: YOLO) -> TaskType:
     if task in ("segment", "pose", "detect"):
         return task
     return "detect"
+
+
+def _to_numpy(t):
+    if t is None:
+        return None
+    if hasattr(t, "cpu"):
+        return t.cpu().numpy()
+    return np.asarray(t)
 
 
 class UltralyticsRuntime:
@@ -48,7 +65,6 @@ class UltralyticsRuntime:
         return out
 
     def load(self, model_id: str, device: str) -> LoadedModel:
-        # 已经加载过且同一文件：直接复用，避免重读权重
         with self._lock:
             cur = self._loaded
         if cur is not None and cur.id == model_id:
@@ -63,7 +79,6 @@ class UltralyticsRuntime:
         names = {str(k): str(v) for k, v in getattr(yolo.model, "names", getattr(yolo, "names", {})).items()}
         task_type = _guess_task_type(yolo)
         loaded = LoadedModel(id=model_id, filename=model_id, task_type=task_type, names=names, yolo=yolo)
-        # warmup 失败不阻断 load，但忠实落库当前模型
         try:
             self._warmup(loaded=loaded, device=device)
         except Exception:
@@ -73,7 +88,6 @@ class UltralyticsRuntime:
         return loaded
 
     def warmup_current(self, device: str) -> None:
-        """切换 device 时仅做一次空推理预热，不重新读权重。"""
         with self._lock:
             loaded = self._loaded
         if loaded is None:
@@ -97,7 +111,17 @@ class UltralyticsRuntime:
         conf: float,
         iou: float,
         class_filter: list[str],
+        track: bool = False,
+        tracker_key: Optional[str] = None,
     ) -> PredResponse:
+        """
+        单帧推理。
+        - track=True 时改用 model.track(persist=True) 启用 ByteTrack。
+        - tracker_key：每条流（webcam/rtsp1/rtsp2…）需要独立 tracker 状态时用。
+          Ultralytics 的 persist 机制对单 model 实例做全局缓存，多路流共享会串号；
+          这里我们走串行 predict_lock，所以不同流之间默认按调用次序累计 id。
+          如需严格分离，可在外层维持多份模型副本——v1 暂不实现。
+        """
         with self._lock:
             loaded = self._loaded
         if loaded is None:
@@ -108,45 +132,134 @@ class UltralyticsRuntime:
         np_img = np.array(rgb)
         t1 = time.perf_counter()
         with self._predict_lock:
-            results = loaded.yolo.predict(
-                np_img,
-                verbose=False,
-                device=device,
-                conf=conf,
-                iou=iou,
-            )
+            if track:
+                results = loaded.yolo.track(
+                    np_img,
+                    verbose=False,
+                    device=device,
+                    conf=conf,
+                    iou=iou,
+                    persist=True,
+                    tracker="bytetrack.yaml",
+                )
+            else:
+                results = loaded.yolo.predict(
+                    np_img,
+                    verbose=False,
+                    device=device,
+                    conf=conf,
+                    iou=iou,
+                )
         t2 = time.perf_counter()
 
         r0 = results[0]
         h, w = np_img.shape[:2]
         bboxes: list[PredBBox] = []
+        masks_out: list[PredMask] = []
+        kpts_out: list[PredInstanceKeypoints] = []
 
+        # ---- boxes + tracking id ----
+        kept_indices: list[int] = []
+        kept_classes: list[str] = []
+        kept_track_ids: list[Optional[int]] = []
         if getattr(r0, "boxes", None) is not None and r0.boxes is not None:
             boxes = r0.boxes
-            xyxy = boxes.xyxy.cpu().numpy() if hasattr(boxes.xyxy, "cpu") else np.asarray(boxes.xyxy)
-            confs = boxes.conf.cpu().numpy() if hasattr(boxes.conf, "cpu") else np.asarray(boxes.conf)
-            clss = boxes.cls.cpu().numpy() if hasattr(boxes.cls, "cpu") else np.asarray(boxes.cls)
-            for (x1, y1, x2, y2), c, cls_id in zip(xyxy, confs, clss):
-                cls_key = str(int(cls_id))
-                cls_name = loaded.names.get(cls_key, cls_key)
-                if class_filter and cls_name not in class_filter:
-                    continue
-                bboxes.append(
-                    PredBBox(
-                        cls=cls_name,
-                        conf=float(c),
-                        x1=float(x1),
-                        y1=float(y1),
-                        x2=float(x2),
-                        y2=float(y2),
-                        label=f"{cls_name} {float(c):.2f}",
+            xyxy = _to_numpy(boxes.xyxy)
+            confs = _to_numpy(boxes.conf)
+            clss = _to_numpy(boxes.cls)
+            ids = _to_numpy(getattr(boxes, "id", None)) if track else None
+            if xyxy is not None and confs is not None and clss is not None:
+                for i in range(len(xyxy)):
+                    x1, y1, x2, y2 = xyxy[i]
+                    c = float(confs[i])
+                    cls_id = int(clss[i])
+                    cls_key = str(cls_id)
+                    cls_name = loaded.names.get(cls_key, cls_key)
+                    if class_filter and cls_name not in class_filter:
+                        continue
+                    tid: Optional[int] = None
+                    if ids is not None and i < len(ids):
+                        try:
+                            tid = int(ids[i])
+                        except Exception:
+                            tid = None
+                    label = f"{cls_name} {c:.2f}" + (f" #{tid}" if tid is not None else "")
+                    bboxes.append(
+                        PredBBox(
+                            cls=cls_name,
+                            conf=c,
+                            x1=float(x1),
+                            y1=float(y1),
+                            x2=float(x2),
+                            y2=float(y2),
+                            label=label,
+                            trackId=tid,
+                        )
                     )
-                )
+                    kept_indices.append(i)
+                    kept_classes.append(cls_name)
+                    kept_track_ids.append(tid)
+
+        # ---- masks (segment) ----
+        if loaded.task_type == "segment" and getattr(r0, "masks", None) is not None and r0.masks is not None:
+            try:
+                # masks.xy 是每个实例的源图像素坐标多边形 (list of (N,2) arrays)
+                xy_polys = r0.masks.xy
+                for k, idx in enumerate(kept_indices):
+                    if idx >= len(xy_polys):
+                        continue
+                    poly = xy_polys[idx]
+                    poly_np = np.asarray(poly)
+                    if poly_np.ndim != 2 or poly_np.shape[0] < 3:
+                        continue
+                    # 简单降采样：>200 点抽稀，传输/绘制更轻
+                    if poly_np.shape[0] > 200:
+                        step = max(1, poly_np.shape[0] // 200)
+                        poly_np = poly_np[::step]
+                    points = [[float(p[0]), float(p[1])] for p in poly_np]
+                    masks_out.append(
+                        PredMask(
+                            cls=kept_classes[k],
+                            trackId=kept_track_ids[k],
+                            points=points,
+                        )
+                    )
+            except Exception:
+                pass
+
+        # ---- keypoints (pose) ----
+        if loaded.task_type == "pose" and getattr(r0, "keypoints", None) is not None and r0.keypoints is not None:
+            try:
+                kp = r0.keypoints
+                # kp.xy: (N, K, 2); kp.conf: (N, K) or None
+                xy = _to_numpy(kp.xy)
+                kp_conf = _to_numpy(getattr(kp, "conf", None))
+                if xy is not None:
+                    for k, idx in enumerate(kept_indices):
+                        if idx >= len(xy):
+                            continue
+                        joints = xy[idx]
+                        confs_j = kp_conf[idx] if kp_conf is not None and idx < len(kp_conf) else None
+                        pts: list[PredKeypoint] = []
+                        for j, (jx, jy) in enumerate(joints):
+                            jc = float(confs_j[j]) if confs_j is not None and j < len(confs_j) else None
+                            pts.append(PredKeypoint(x=float(jx), y=float(jy), conf=jc))
+                        kpts_out.append(
+                            PredInstanceKeypoints(
+                                cls=kept_classes[k],
+                                trackId=kept_track_ids[k],
+                                points=pts,
+                            )
+                        )
+            except Exception:
+                pass
 
         t3 = time.perf_counter()
+        infer_ms = (t2 - t1) * 1000.0
+        record_latency(infer_ms)
         tel = Telemetry(
             preprocessMs=(t1 - t0) * 1000.0,
-            inferenceMs=(t2 - t1) * 1000.0,
+            inferenceMs=infer_ms,
             postprocessMs=(t3 - t2) * 1000.0,
         )
 
@@ -156,6 +269,7 @@ class UltralyticsRuntime:
             height=h,
             taskType=loaded.task_type,
             bboxes=bboxes,
+            masks=masks_out,
+            keypoints=kpts_out,
             telemetry=tel,
         )
-

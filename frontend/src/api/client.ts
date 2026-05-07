@@ -1,4 +1,4 @@
-import type { DeviceType, LogEntry, ModelInfo, Params, PredResponse } from '../store/useConsoleStore'
+import type { DeviceType, LogEntry, ModelInfo, Params, PredResponse, SystemStats } from '../store/useConsoleStore'
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -77,6 +77,70 @@ export async function apiExportLogsCsv() {
   return await res.text()
 }
 
+export async function apiSystemStats() {
+  const res = await fetch('/api/system/stats')
+  return json<SystemStats>(res)
+}
+
+// ---- Webhook ----
+export type WebhookFormat = 'generic' | 'dingtalk' | 'wecom' | 'feishu' | 'slack'
+export type NotifyKind = 'alert' | 'line.cross' | 'zone.enter' | 'zone.leave' | 'test'
+export type LevelType = 'INFO' | 'WARN' | 'ERROR'
+
+export type WebhookConfig = {
+  enabled: boolean
+  url: string
+  format: WebhookFormat
+  minLevel: LevelType
+  cooldownSec: number
+  includeKinds: NotifyKind[]
+  timeoutSec: number
+}
+
+export type NotifyResult = {
+  ok: boolean
+  skipped?: boolean
+  reason?: string
+  httpStatus?: number
+}
+
+export type NotifyRequest = {
+  kind: NotifyKind
+  level?: LevelType
+  title: string
+  msg: string
+  ref?: string
+  fields?: Record<string, unknown>
+}
+
+export async function apiGetWebhook() {
+  const res = await fetch('/api/webhook')
+  return json<WebhookConfig>(res)
+}
+
+export async function apiSetWebhook(cfg: WebhookConfig) {
+  const res = await fetch('/api/webhook', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(cfg),
+  })
+  return json<WebhookConfig>(res)
+}
+
+export async function apiTestWebhook() {
+  const res = await fetch('/api/webhook/test', { method: 'POST' })
+  return json<NotifyResult>(res)
+}
+
+export async function apiNotify(req: NotifyRequest) {
+  const res = await fetch('/api/notify', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  return json<NotifyResult>(res)
+}
+
 export function wsInferUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}/ws/infer`
@@ -87,6 +151,15 @@ export function wsStreamUrl() {
   return `${proto}//${location.host}/ws/stream`
 }
 
-export type WsPredMessage = { type: 'pred' } & PredResponse
-export type WsLogMessage = { type: 'log' } & LogEntry
+export type WsPredMessage = { type: 'pred'; streamId?: string } & PredResponse
+export type WsLogMessage = { type: 'log'; streamId?: string } & LogEntry
+export type WsFrameMessage = {
+  type: 'frame'
+  streamId?: string
+  frameId: string
+  ts: number
+  imageJpegBase64: string
+  width: number
+  height: number
+}
 

@@ -1,0 +1,30 @@
+.dropZone {
+  border: 1px dashed var(--line-0);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dropOver {
+  border-color: rgba(76, 255, 122, 0.85);
+  background: rgba(76, 255, 122, 0.06);
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fileInput {
+  display: none;
+}
+.hint {
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.status {
+  font-size: 11px;
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  color: var(--fg-1);
+  min-height: 14px;
+}

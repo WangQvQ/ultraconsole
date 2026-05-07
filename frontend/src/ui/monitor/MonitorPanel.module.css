@@ -41,7 +41,8 @@
 }
 
 .logBox {
-  height: 60vh;
+  height: 28vh;
+  min-height: 160px;
   overflow: auto;
   font-family: ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
@@ -82,5 +83,80 @@
 
 .hint {
   color: var(--fg-2);
+}
+
+.countersBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.counterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lineDot,
+.zoneDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.lineDot {
+  background: rgba(255, 215, 0, 0.95);
+}
+.zoneDot {
+  background: rgba(255, 99, 132, 0.95);
+}
+.cName {
+  flex: 1 1 auto;
+  color: var(--fg-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cIn {
+  color: rgba(76, 255, 122, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+.cOut {
+  color: rgba(255, 132, 132, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+.cCur {
+  color: rgba(76, 200, 255, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+.cTot {
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.eventBox {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  font-family: ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+.eventRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--fg-1);
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.eventKind {
+  width: 80px;
+  color: rgba(255, 215, 0, 0.95);
+}
+.eventCls {
+  color: var(--fg-2);
+  margin-left: auto;
 }
 

@@ -1,0 +1,71 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.k {
+  width: 56px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.v {
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+}
+.subRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  padding-left: 56px;
+}
+.gpu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
+.subTitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.latency {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.latencyStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.latencyStats b {
+  color: rgba(76, 255, 122, 0.95);
+  font-weight: 600;
+}
+.sparkline {
+  display: block;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+}
+.hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}

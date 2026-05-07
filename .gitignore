@@ -28,6 +28,9 @@ htmlcov/
 backend/.venv/
 backend/venv/
 backend/.env/
+
+# Webhook 持久化（含外部 URL，避免泄漏）
+backend/.webhook.json
 .venv/
 venv/
 ENV/

@@ -1,44 +1,81 @@
 import { useEffect, useRef } from 'react'
-import type { PredResponse } from '../../../store/useConsoleStore'
+import { useConsoleStore, type PredResponse } from '../../../store/useConsoleStore'
+import {
+  drawBoxes,
+  drawCountingLines,
+  drawCountingZones,
+  drawKeypoints,
+  drawMasks,
+  drawTrails,
+  fitContain,
+  pruneTrails,
+  pushTrail,
+  type TrailMap,
+} from '../../../utils/draw'
 import styles from './CanvasOverlay.module.css'
-
-function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
-  ctx.font = '12px ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-  const padX = 6
-  const padY = 4
-  const w = ctx.measureText(text).width + padX * 2
-  const h = 16 + padY * 2
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'
-  ctx.fillRect(x, y - h, w, h)
-  ctx.fillStyle = 'rgba(255,255,255,0.92)'
-  ctx.fillText(text, x + padX, y - padY)
-}
 
 export function CanvasOverlay(props: {
   imgRef: React.RefObject<HTMLImageElement | null>
   pred?: PredResponse
   showBBox: boolean
   showLabels: boolean
+  showMasks?: boolean
+  showKeypoints?: boolean
+  showTrails?: boolean
+  drawEvents?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // 用 ref 持有最新的绘制参数，避免每次 pred 变化都重建 observer
+  const eventsConfig = useConsoleStore((s) => s.eventsConfig)
+
   const predRef = useRef<PredResponse | undefined>(props.pred)
-  const showBBoxRef = useRef(props.showBBox)
-  const showLabelsRef = useRef(props.showLabels)
+  const flagsRef = useRef({
+    showBBox: props.showBBox,
+    showLabels: props.showLabels,
+    showMasks: props.showMasks ?? true,
+    showKeypoints: props.showKeypoints ?? true,
+    showTrails: props.showTrails ?? true,
+    drawEvents: props.drawEvents ?? true,
+  })
+  const eventsRef = useRef(eventsConfig)
+  const trailsRef = useRef<TrailMap>(new Map())
   const redrawRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     predRef.current = props.pred
+    if (props.pred) {
+      const active = new Set<number>()
+      const w = props.pred.width
+      const h = props.pred.height
+      for (const b of props.pred.bboxes) {
+        if (b.trackId !== undefined && b.trackId !== null) {
+          active.add(b.trackId)
+          if (w > 0 && h > 0) {
+            const cx = ((b.x1 + b.x2) / 2) / w
+            const cy = ((b.y1 + b.y2) / 2) / h
+            pushTrail(trailsRef.current, b.trackId, cx, cy)
+          }
+        }
+      }
+      pruneTrails(trailsRef.current, active)
+    }
   }, [props.pred])
-  useEffect(() => {
-    showBBoxRef.current = props.showBBox
-  }, [props.showBBox])
-  useEffect(() => {
-    showLabelsRef.current = props.showLabels
-  }, [props.showLabels])
 
-  // observer / 监听只挂一次
+  useEffect(() => {
+    flagsRef.current = {
+      showBBox: props.showBBox,
+      showLabels: props.showLabels,
+      showMasks: props.showMasks ?? true,
+      showKeypoints: props.showKeypoints ?? true,
+      showTrails: props.showTrails ?? true,
+      drawEvents: props.drawEvents ?? true,
+    }
+  }, [props.showBBox, props.showLabels, props.showMasks, props.showKeypoints, props.showTrails, props.drawEvents])
+
+  useEffect(() => {
+    eventsRef.current = eventsConfig
+  }, [eventsConfig])
+
   useEffect(() => {
     const img = props.imgRef.current
     const canvas = canvasRef.current
@@ -64,29 +101,26 @@ export function CanvasOverlay(props: {
         ctx.clearRect(0, 0, r.width, r.height)
 
         const pred = predRef.current
-        if (!pred || !showBBoxRef.current) return
-        const srcW = pred.width
-        const srcH = pred.height
+        const flags = flagsRef.current
+        const evCfg = eventsRef.current
+
+        const srcW = pred?.width ?? 0
+        const srcH = pred?.height ?? 0
         if (srcW <= 0 || srcH <= 0) return
+        const fc = fitContain(r.width, r.height, srcW, srcH)
 
-        const scale = Math.min(r.width / srcW, r.height / srcH)
-        const drawW = srcW * scale
-        const drawH = srcH * scale
-        const offX = (r.width - drawW) / 2
-        const offY = (r.height - drawH) / 2
-
-        ctx.lineWidth = 2
-        ctx.strokeStyle = 'rgba(76,255,122,0.95)'
-
-        for (const b of pred.bboxes) {
-          const x = offX + b.x1 * scale
-          const y = offY + b.y1 * scale
-          const w = (b.x2 - b.x1) * scale
-          const h = (b.y2 - b.y1) * scale
-          ctx.strokeRect(x, y, w, h)
-          if (showLabelsRef.current && b.label) {
-            drawLabel(ctx, b.label, x, y)
-          }
+        // 顺序：mask（底） → zone/line（中底） → trail → bbox → keypoints
+        if (pred && flags.showMasks && pred.masks && pred.masks.length > 0) {
+          drawMasks(ctx, pred.masks, fc)
+        }
+        if (flags.drawEvents) {
+          drawCountingZones(ctx, evCfg.zones, fc, srcW, srcH)
+          drawCountingLines(ctx, evCfg.lines, fc, srcW, srcH)
+        }
+        if (flags.showTrails) drawTrails(ctx, trailsRef.current, fc)
+        if (pred && flags.showBBox) drawBoxes(ctx, pred.bboxes, fc, flags.showLabels)
+        if (pred && flags.showKeypoints && pred.keypoints && pred.keypoints.length > 0) {
+          drawKeypoints(ctx, pred.keypoints, fc)
         }
       })
     }
@@ -109,10 +143,18 @@ export function CanvasOverlay(props: {
     }
   }, [props.imgRef])
 
-  // 任何绘制相关 prop 变化只触发一次轻量重绘
   useEffect(() => {
     redrawRef.current?.()
-  }, [props.pred, props.showBBox, props.showLabels])
+  }, [
+    props.pred,
+    props.showBBox,
+    props.showLabels,
+    props.showMasks,
+    props.showKeypoints,
+    props.showTrails,
+    props.drawEvents,
+    eventsConfig,
+  ])
 
   return <canvas ref={canvasRef} className={styles.canvas} />
 }

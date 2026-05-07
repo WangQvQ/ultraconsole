@@ -28,6 +28,7 @@ export function VideoTab() {
 
   const [running, setRunning] = useState(false)
   const [targetFps, setTargetFps] = useState(8)
+  const [dragOver, setDragOver] = useState(false)
   const targetFpsRef = useRef(targetFps)
   useEffect(() => void (targetFpsRef.current = targetFps), [targetFps])
 
@@ -205,11 +206,28 @@ export function VideoTab() {
         <div className={styles.meta}>bbox={bboxes.length}</div>
       </div>
 
-      <div className={[styles.stage, alertActive ? styles.alertOn : ''].join(' ')}>
+      <div
+        className={[styles.stage, alertActive ? styles.alertOn : '', dragOver ? styles.dropOver : ''].join(' ')}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+          if (!dragOver) setDragOver(true)
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDragOver(false)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const file = e.dataTransfer?.files?.[0]
+          if (file && file.type.startsWith('video/')) void onPick(file)
+        }}
+      >
         <video ref={videoRef} className={styles.video} controls playsInline />
         <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
         <RoiOverlay anchorRef={videoRef} />
         <TelemetryHUD telemetry={filteredPred?.telemetry} />
+        {dragOver && <div className={styles.dropHint}>松开以载入视频</div>}
       </div>
     </div>
   )

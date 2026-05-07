@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { wsInferUrl, type WsLogMessage, type WsPredMessage } from '../../../api/client'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { downloadBadCaseZip } from '../../../utils/badcase'
+import { createReconnectingWs, type ReconnectingWs, type WsState as RWsState } from '../../../utils/reconnectWs'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
 import { NeoButton } from '../../primitives/NeoButton'
 import { TelemetryHUD } from '../widgets/TelemetryHUD'
 import { VideoCanvasOverlay } from '../widgets/VideoCanvasOverlay'
 import { RoiOverlay } from '../widgets/RoiOverlay'
+import { EventEditOverlay } from '../widgets/EventEditOverlay'
 import styles from './WebcamTab.module.css'
 
 type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
@@ -27,7 +29,7 @@ export function WebcamTab() {
   const setConnections = useConsoleStore((s) => s.setConnections)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef = useRef<ReconnectingWs | null>(null)
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const inferRunningRef = useRef(false)
   const paramsRef = useRef(params)
@@ -37,6 +39,7 @@ export function WebcamTab() {
   const [previewing, setPreviewing] = useState(false)
   const [inferring, setInferring] = useState(false)
   const [targetFps, setTargetFps] = useState(10)
+  const [editTool, setEditTool] = useState<'none' | 'line' | 'zone'>('none')
 
   const filteredPred = useMemo(() => {
     if (!lastPred) return undefined
@@ -67,15 +70,10 @@ export function WebcamTab() {
 
   useEffect(() => {
     return () => {
-      // 卸载清理：仅触碰 ref / 关流，避免在已卸载组件上 setState
       inferRunningRef.current = false
       const ws = wsRef.current
       wsRef.current = null
-      try {
-        ws?.close()
-      } catch {
-        // ignore
-      }
+      ws?.close()
       const video = videoRef.current
       const stream = (video?.srcObject ?? null) as MediaStream | null
       if (stream) for (const t of stream.getTracks()) t.stop()
@@ -107,36 +105,33 @@ export function WebcamTab() {
 
     setWsState('connecting')
     setConnections({ inferWs: 'connecting' })
-    const ws = new WebSocket(wsInferUrl())
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      setWsState('open')
-      setConnections({ inferWs: 'open' })
-      pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'ws.open', msg: 'connected', fields: {} })
-    }
-    ws.onclose = () => {
-      setWsState('closed')
-      setConnections({ inferWs: 'closed' })
-      pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'ws.close', msg: 'closed', fields: {} })
-    }
-    ws.onerror = () => {
-      setWsState('error')
-      setConnections({ inferWs: 'error' })
-      pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'ws.error', msg: 'websocket error', fields: {} })
-    }
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data) as WsPredMessage | WsLogMessage
-        if (msg.type === 'pred') {
-          setLastPred(msg)
-        } else if (msg.type === 'log') {
-          pushLog(msg)
-        }
-      } catch {
-        // ignore
+    const handleState = (s: RWsState, info?: { attempt?: number; reason?: string }) => {
+      const map: Record<RWsState, WsState> = {
+        idle: 'idle', connecting: 'connecting', open: 'open',
+        closed: 'closed', error: 'error', reconnecting: 'connecting',
+      }
+      setWsState(map[s])
+      setConnections({ inferWs: map[s] })
+      if (s === 'open') {
+        pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'ws.open', msg: 'connected', fields: {} })
+      } else if (s === 'reconnecting') {
+        pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'ws.reconnect', msg: `attempt ${info?.attempt}`, fields: {} })
+      } else if (s === 'closed' && info?.reason && info.reason !== 'client_close') {
+        pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'ws.close', msg: info.reason, fields: {} })
       }
     }
+
+    const ws = createReconnectingWs({
+      url: wsInferUrl(),
+      onState: handleState,
+      onMessage: (data) => {
+        const msg = data as WsPredMessage | WsLogMessage
+        if (!msg || typeof msg !== 'object') return
+        if (msg.type === 'pred') setLastPred(msg)
+        else if (msg.type === 'log') pushLog(msg)
+      },
+    })
+    wsRef.current = ws
 
     loopSendFrames()
   }
@@ -146,7 +141,7 @@ export function WebcamTab() {
     inferRunningRef.current = false
     const ws = wsRef.current
     wsRef.current = null
-    if (ws && ws.readyState === WebSocket.OPEN) ws.close()
+    ws?.close()
     setWsState('idle')
     setConnections({ inferWs: 'idle' })
   }
@@ -163,9 +158,8 @@ export function WebcamTab() {
   }
 
   function loopSendFrames() {
-    const ws = wsRef.current
     const video = videoRef.current
-    if (!ws || !video) return
+    if (!video) return
 
     let lastSent = 0
     let frameSeq = 0
@@ -185,14 +179,16 @@ export function WebcamTab() {
 
     const tick = () => {
       if (!inferRunningRef.current) return
+      const ws = wsRef.current
       const now = performance.now()
       const minInterval = 1000 / Math.max(1, targetFpsRef.current)
       const ready =
-        ws.readyState === WebSocket.OPEN &&
+        ws !== null &&
+        ws.state() === 'open' &&
         video.readyState >= 2 &&
         now - lastSent >= minInterval &&
         !encoding &&
-        ws.bufferedAmount < MAX_BUFFERED
+        ws.bufferedAmount() < MAX_BUFFERED
       if (ready) {
         lastSent = now
         const w = video.videoWidth || 640
@@ -206,15 +202,17 @@ export function WebcamTab() {
           encoding = true
           c.toBlob(
             (blob) => {
-              if (!blob || !inferRunningRef.current || ws.readyState !== WebSocket.OPEN) {
+              const wsNow = wsRef.current
+              if (!blob || !inferRunningRef.current || !wsNow || wsNow.state() !== 'open') {
                 encoding = false
                 return
               }
               blobToBase64(blob)
                 .then((b64) => {
-                  if (!inferRunningRef.current || ws.readyState !== WebSocket.OPEN) return
+                  const wsSend = wsRef.current
+                  if (!inferRunningRef.current || !wsSend || wsSend.state() !== 'open') return
                   const p = paramsRef.current
-                  ws.send(
+                  wsSend.send(
                     JSON.stringify({
                       type: 'frame',
                       frameId: String(frameSeq++),
@@ -225,6 +223,7 @@ export function WebcamTab() {
                       conf: p.conf,
                       iou: p.iou,
                       classFilter: p.classFilter,
+                      track: p.track,
                     }),
                   )
                 })
@@ -307,6 +306,20 @@ export function WebcamTab() {
           📷 BadCase
         </NeoButton>
 
+        <NeoButton
+          onClick={() => setEditTool(editTool === 'line' ? 'none' : 'line')}
+          disabled={!previewing}
+          tone={editTool === 'line' ? 'danger' : 'default'}
+        >
+          + Line
+        </NeoButton>
+        <NeoButton
+          onClick={() => setEditTool(editTool === 'zone' ? 'none' : 'zone')}
+          disabled={!previewing}
+          tone={editTool === 'zone' ? 'danger' : 'default'}
+        >
+          + Zone
+        </NeoButton>
         <NeoButton onClick={() => setRoi({ enabled: !roi.enabled })} disabled={!previewing}>
           ROI
         </NeoButton>
@@ -361,6 +374,11 @@ export function WebcamTab() {
         <video ref={videoRef} className={styles.video} muted playsInline />
         <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
         <RoiOverlay anchorRef={videoRef} />
+        <EventEditOverlay
+          anchorRef={videoRef}
+          enabled={editTool !== 'none'}
+          mode={editTool === 'line' ? 'line' : 'zone'}
+        />
         <TelemetryHUD telemetry={filteredPred?.telemetry} />
       </div>
     </div>

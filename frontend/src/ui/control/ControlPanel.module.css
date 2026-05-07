@@ -74,3 +74,12 @@
   font-size: 12px;
 }
 
+.toggleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-1);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+

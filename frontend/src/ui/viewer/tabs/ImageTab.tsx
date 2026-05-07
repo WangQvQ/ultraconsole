@@ -28,6 +28,7 @@ export function ImageTab() {
   const imgUrlRef = useRef<string | null>(null)
   const [imgFile, setImgFile] = useState<File | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const busyRef = useRef(false)
   const pendingReInferRef = useRef(false)
   const reInferTimerRef = useRef<number | null>(null)
@@ -207,7 +208,24 @@ export function ImageTab() {
         </div>
       </div>
 
-      <div className={[styles.stage, alertActive ? styles.alertOn : ''].join(' ')}>
+      <div
+        className={[styles.stage, alertActive ? styles.alertOn : '', dragOver ? styles.dropOver : ''].join(' ')}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+          if (!dragOver) setDragOver(true)
+        }}
+        onDragLeave={(e) => {
+          // 只在离开 stage 本身时清除（避免子元素 dragleave 误触发）
+          if (e.currentTarget === e.target) setDragOver(false)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const file = e.dataTransfer?.files?.[0]
+          if (file && file.type.startsWith('image/')) void onPick(file)
+        }}
+      >
         {imgUrl ? (
           <>
             <img ref={imgRef} className={styles.img} src={imgUrl} alt="" />
@@ -216,9 +234,10 @@ export function ImageTab() {
             <TelemetryHUD telemetry={filteredPred?.telemetry} />
           </>
         ) : (
-          <div className={styles.empty}>拖拽/选择一张图片开始。</div>
+          <div className={styles.empty}>拖拽图片到此处，或点击「选择图片」。</div>
         )}
 
+        {dragOver && <div className={styles.dropHint}>松开以载入图片</div>}
         {busy && <div className={styles.busy}>推理中…</div>}
       </div>
 

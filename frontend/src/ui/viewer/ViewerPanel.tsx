@@ -3,10 +3,11 @@ import { Card } from '../primitives/Card'
 import { ImageTab } from './tabs/ImageTab'
 import { RtspTab } from './tabs/RtspTab'
 import { VideoTab } from './tabs/VideoTab'
+import { WallTab } from './tabs/WallTab'
 import { WebcamTab } from './tabs/WebcamTab'
 import styles from './ViewerPanel.module.css'
 
-type TabKey = 'image' | 'video' | 'rtsp' | 'webcam'
+type TabKey = 'image' | 'video' | 'rtsp' | 'webcam' | 'wall'
 
 export function ViewerPanel() {
   const [tab, setTab] = useState<TabKey>('image')
@@ -26,6 +27,9 @@ export function ViewerPanel() {
         <button className={[styles.tab, tab === 'webcam' ? styles.on : ''].join(' ')} onClick={() => setTab('webcam')}>
           Webcam
         </button>
+        <button className={[styles.tab, tab === 'wall' ? styles.on : ''].join(' ')} onClick={() => setTab('wall')}>
+          Wall
+        </button>
       </div>
 
       <Card title="Core View">
@@ -33,8 +37,8 @@ export function ViewerPanel() {
         {tab === 'video' && <VideoTab />}
         {tab === 'rtsp' && <RtspTab />}
         {tab === 'webcam' && <WebcamTab />}
+        {tab === 'wall' && <WallTab />}
       </Card>
     </div>
   )
 }
-

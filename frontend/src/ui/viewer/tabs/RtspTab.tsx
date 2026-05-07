@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { wsStreamUrl } from '../../../api/client'
 import { useConsoleStore } from '../../../store/useConsoleStore'
+import { createReconnectingWs, type ReconnectingWs, type WsState as RWsState } from '../../../utils/reconnectWs'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
 import { NeoButton } from '../../primitives/NeoButton'
 import { CanvasOverlay } from '../widgets/CanvasOverlay'
+import { EventEditOverlay } from '../widgets/EventEditOverlay'
 import { RoiOverlay } from '../widgets/RoiOverlay'
 import { TelemetryHUD } from '../widgets/TelemetryHUD'
 import styles from './RtspTab.module.css'
@@ -31,15 +33,19 @@ export function RtspTab() {
   const setConnections = useConsoleStore((s) => s.setConnections)
 
   const imgRef = useRef<HTMLImageElement | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef = useRef<ReconnectingWs | null>(null)
   const frameUrlRef = useRef<string | null>(null)
   const runningRef = useRef(false)
+  const startMsgRef = useRef<string | null>(null)
 
   const [url, setUrl] = useState('rtsp://')
   const [wsState, setWsState] = useState<WsState>('idle')
   const [fps, setFps] = useState(10)
   const [running, setRunning] = useState(false)
   const [frameUrl, setFrameUrl] = useState<string | null>(null)
+  const [editTool, setEditTool] = useState<'none' | 'line' | 'zone'>('none')
+
+  const track = useConsoleStore((s) => s.params.track)
 
   const filteredPred = useMemo(() => {
     if (!lastPred) return undefined
@@ -62,20 +68,15 @@ export function RtspTab() {
 
   useEffect(() => {
     return () => {
-      // 卸载清理：仅触碰 ref / 关闭 ws / 释放 blob URL，不再 setState
       runningRef.current = false
       const ws = wsRef.current
       wsRef.current = null
       try {
-        ws?.send(JSON.stringify({ type: 'rtsp.stop' }))
+        ws?.send(JSON.stringify({ type: 'rtsp.stop', streamId: 'main' }))
       } catch {
         // ignore
       }
-      try {
-        ws?.close()
-      } catch {
-        // ignore
-      }
+      ws?.close()
       if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current)
       frameUrlRef.current = null
     }
@@ -102,12 +103,13 @@ export function RtspTab() {
   function stop() {
     const ws = wsRef.current
     try {
-      ws?.send(JSON.stringify({ type: 'rtsp.stop' }))
+      ws?.send(JSON.stringify({ type: 'rtsp.stop', streamId: 'main' }))
     } catch {
       // ignore
     }
     setWsState('idle')
     setConnections({ rtspWs: 'idle' })
+    startMsgRef.current = null
     cleanup()
   }
 
@@ -119,43 +121,51 @@ export function RtspTab() {
     setConnections({ rtspWs: 'connecting' })
     setLastPred(undefined)
 
-    const ws = new WebSocket(wsStreamUrl())
-    wsRef.current = ws
+    startMsgRef.current = JSON.stringify({
+      type: 'rtsp.start',
+      streamId: 'main',
+      url,
+      fps,
+      conf: params.conf,
+      iou: params.iou,
+      classFilter: params.classFilter,
+      track,
+    })
 
-    ws.onopen = () => {
-      setWsState('open')
-      setConnections({ rtspWs: 'open' })
-      pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'rtsp.ws.open', msg: 'connected', fields: {} })
-      ws.send(
-        JSON.stringify({
-          type: 'rtsp.start',
-          url,
-          fps,
-          conf: params.conf,
-          iou: params.iou,
-          classFilter: params.classFilter,
-        }),
-      )
-    }
-    ws.onclose = () => {
+    const handleState = (s: RWsState, info?: { attempt?: number; reason?: string }) => {
       if (!runningRef.current) return
-      setWsState('closed')
-      setConnections({ rtspWs: 'closed' })
-      pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'rtsp.ws.close', msg: 'closed', fields: {} })
-      cleanup()
+      const map: Record<RWsState, WsState> = {
+        idle: 'idle', connecting: 'connecting', open: 'open',
+        closed: 'closed', error: 'error', reconnecting: 'connecting',
+      }
+      setWsState(map[s])
+      setConnections({ rtspWs: map[s] })
+      if (s === 'open') {
+        pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'rtsp.ws.open', msg: 'connected', fields: {} })
+      } else if (s === 'reconnecting') {
+        pushLog({
+          ts: Date.now() / 1000,
+          level: 'WARN',
+          event: 'rtsp.ws.reconnect',
+          msg: `attempt ${info?.attempt}`,
+          fields: {},
+        })
+      }
     }
-    ws.onerror = () => {
-      if (!runningRef.current) return
-      setWsState('error')
-      setConnections({ rtspWs: 'error' })
-      pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'rtsp.ws.error', msg: 'websocket error', fields: {} })
-      cleanup()
-    }
-    ws.onmessage = (ev) => {
-      if (!runningRef.current) return
-      try {
-        const msg = JSON.parse(ev.data) as any
-        if (msg.type === 'frame' && msg.imageJpegBase64) {
+
+    const ws = createReconnectingWs({
+      url: wsStreamUrl(),
+      onState: handleState,
+      onOpen: () => {
+        // 每次连接（含重连）都重发 rtsp.start
+        const m = startMsgRef.current
+        if (m) wsRef.current?.send(m)
+      },
+      onMessage: (data) => {
+        if (!runningRef.current) return
+        const msg = data as Record<string, unknown>
+        if (!msg || typeof msg !== 'object') return
+        if (msg.type === 'frame' && typeof msg.imageJpegBase64 === 'string') {
           const next = b64ToBlobUrl(msg.imageJpegBase64)
           if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current)
           frameUrlRef.current = next
@@ -163,16 +173,15 @@ export function RtspTab() {
           return
         }
         if (msg.type === 'pred') {
-          setLastPred(msg)
+          setLastPred(msg as never)
           return
         }
         if (msg.type === 'log') {
-          pushLog(msg)
+          pushLog(msg as never)
         }
-      } catch {
-        // ignore
-      }
-    }
+      },
+    })
+    wsRef.current = ws
   }
 
   return (
@@ -220,6 +229,20 @@ export function RtspTab() {
 
         <div className={styles.divider} />
 
+        <NeoButton
+          onClick={() => setEditTool(editTool === 'line' ? 'none' : 'line')}
+          disabled={!frameUrl}
+          tone={editTool === 'line' ? 'danger' : 'default'}
+        >
+          + Line
+        </NeoButton>
+        <NeoButton
+          onClick={() => setEditTool(editTool === 'zone' ? 'none' : 'zone')}
+          disabled={!frameUrl}
+          tone={editTool === 'zone' ? 'danger' : 'default'}
+        >
+          + Zone
+        </NeoButton>
         <NeoButton onClick={() => setRoi({ enabled: !roi.enabled })} disabled={!frameUrl}>
           ROI
         </NeoButton>
@@ -249,6 +272,11 @@ export function RtspTab() {
             <img ref={imgRef} className={styles.img} src={frameUrl} alt="" />
             <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
             <RoiOverlay anchorRef={imgRef} />
+            <EventEditOverlay
+              anchorRef={imgRef}
+              enabled={editTool !== 'none'}
+              mode={editTool === 'line' ? 'line' : 'zone'}
+            />
             <TelemetryHUD telemetry={filteredPred?.telemetry} />
           </>
         ) : (

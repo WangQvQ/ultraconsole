@@ -92,3 +92,19 @@
   object-fit: contain;
 }
 
+.dropOver {
+  outline: 2px dashed rgba(76, 255, 122, 0.85);
+  outline-offset: -8px;
+}
+.dropHint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: rgba(76, 255, 122, 0.95);
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+

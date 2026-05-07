@@ -1,8 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { apiExportLogsCsv } from '../../api/client'
 import { useConsoleStore } from '../../store/useConsoleStore'
+import { useEventTracker } from '../../utils/useEventTracker'
+import { useSystemStats } from '../../utils/useSystemStats'
+import { useWebhookDispatcher } from '../../utils/useWebhookDispatcher'
 import { Card } from '../primitives/Card'
 import { NeoButton } from '../primitives/NeoButton'
+import { ConfigCard } from './ConfigCard'
+import { SystemStatsCard } from './SystemStatsCard'
+import { WebhookCard } from './WebhookCard'
 import styles from './MonitorPanel.module.css'
 
 export function MonitorPanel() {
@@ -14,6 +20,15 @@ export function MonitorPanel() {
   const pushLog = useConsoleStore((s) => s.pushLog)
   const setAlert = useConsoleStore((s) => s.setAlert)
   const setAlertConfig = useConsoleStore((s) => s.setAlertConfig)
+  const counters = useConsoleStore((s) => s.counters)
+  const events = useConsoleStore((s) => s.events)
+  const eventsConfig = useConsoleStore((s) => s.eventsConfig)
+  const resetCounters = useConsoleStore((s) => s.resetCounters)
+
+  // 启动全局 hook：系统资源轮询、事件追踪、webhook 派发
+  useSystemStats()
+  useEventTracker()
+  useWebhookDispatcher()
 
   // 轻量规则引擎：目标类别出现连续 N 帧 -> 告警
   const prevActiveRef = useRef(false)
@@ -91,8 +106,73 @@ export function MonitorPanel() {
     }
   }
 
+  const lineNameById = new Map(eventsConfig.lines.map((l) => [l.id, l.name || l.id]))
+  const zoneNameById = new Map(eventsConfig.zones.map((z) => [z.id, z.name || z.id]))
+  const recentEvents = events.slice(-30).reverse()
+
   return (
     <div className={styles.stack}>
+      <SystemStatsCard />
+
+      <WebhookCard />
+
+      <ConfigCard />
+
+      <Card
+        title="Counters / Events"
+        right={
+          <NeoButton onClick={resetCounters} style={{ padding: '6px 10px', fontSize: 11 }}>
+            重置
+          </NeoButton>
+        }
+      >
+        {eventsConfig.lines.length === 0 && eventsConfig.zones.length === 0 ? (
+          <div className={styles.hint}>启用 Tracking 并在画面上画"计数线"或"区域"后，这里会出现统计。</div>
+        ) : (
+          <div className={styles.countersBox}>
+            {eventsConfig.lines.map((l) => {
+              const c = counters.byLine[l.id] || { in: 0, out: 0 }
+              return (
+                <div key={l.id} className={styles.counterRow}>
+                  <span className={styles.lineDot} />
+                  <span className={styles.cName}>{l.name || l.id}</span>
+                  <span className={styles.cIn}>↑ in {c.in}</span>
+                  <span className={styles.cOut}>↓ out {c.out}</span>
+                </div>
+              )
+            })}
+            {eventsConfig.zones.map((z) => {
+              const c = counters.byZone[z.id] || { current: 0, total: 0 }
+              return (
+                <div key={z.id} className={styles.counterRow}>
+                  <span className={styles.zoneDot} />
+                  <span className={styles.cName}>{z.name || z.id}</span>
+                  <span className={styles.cCur}>now {c.current}</span>
+                  <span className={styles.cTot}>total {c.total}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {recentEvents.length > 0 && (
+          <div className={styles.eventBox}>
+            {recentEvents.map((e, i) => {
+              const name = e.kind === 'line.cross' ? lineNameById.get(e.ref) : zoneNameById.get(e.ref)
+              return (
+                <div key={i} className={styles.eventRow}>
+                  <span className={styles.eventKind}>
+                    {e.kind === 'line.cross' ? `LINE ${e.direction}` : e.kind === 'zone.enter' ? 'ENTER' : 'LEAVE'}
+                  </span>
+                  <span>{name}</span>
+                  <span className={styles.eventCls}>{e.cls}#{e.trackId ?? '-'}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
       <Card title="Alert Engine" right={alert.active ? alert.reason : `streak=${alert.streak}`}>
         <div className={styles.alertRow}>
           <label className={styles.toggle}>

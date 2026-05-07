@@ -6,3 +6,6 @@ ultralytics
 opencv-python
 numpy
 Pillow
+psutil
+nvidia-ml-py
+httpx
