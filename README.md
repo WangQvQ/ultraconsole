@@ -203,40 +203,40 @@ uvicorn app.main:app --reload --port 8001
 
 ```mermaid
 flowchart TB
-  subgraph PresentationLayer["表现层（Presentation Layer）"]
-    UI["Web Console UI (React/Vite)\n- Control (Model/Engine/Params/Class/Tracking)\n- Viewer (Image/Video/Webcam/RTSP/Wall) + Canvas OSD + HUD\n- Monitor (SystemStats/Webhook/Config/Counters/Events/Alert/Logs)"]
-    BrowserMedia["Browser Media Inputs\n- File (Image/Video) + Drag&Drop\n- Webcam (getUserMedia)"]
+  subgraph PresentationLayer["表现层 Presentation Layer"]
+    UI["Web Console UI<br/>React / Vite<br/>Control + Viewer + Monitor"]
+    BrowserMedia["Browser Media Inputs<br/>File + Drag&amp;Drop<br/>Webcam getUserMedia"]
   end
 
-  subgraph BusinessLogicLayer["业务逻辑层（Business Logic Layer）"]
-    ApiGateway["API Gateway (FastAPI)\n- /api/models /api/engine /api/params\n- /api/infer/image /api/infer/frame\n- /api/system/stats\n- /api/webhook* /api/notify\n- /api/logs/export.csv"]
-    WsInfer["WS /ws/infer\n- Webcam frames (+ ping/pong)\n- → preds/logs"]
-    WsStream["WS /ws/stream\n- 多路 streamId 路由\n- rtsp.start/stop/stopAll\n- → frames/preds/logs (含 streamId)"]
-    Rules["Frontend Logic\n- ReconnectingWs (指数退避 + ping/pong)\n- ByteTrack 事件检测 (line/zone)\n- Alert rules + Webhook dispatcher\n- ROI / OSD / BadCase / Config IO"]
+  subgraph BusinessLogicLayer["业务逻辑层 Business Logic Layer"]
+    ApiGateway["API Gateway<br/>FastAPI REST endpoints"]
+    WsInfer["WS /ws/infer<br/>Webcam frames + ping/pong"]
+    WsStream["WS /ws/stream<br/>多路 streamId 路由<br/>rtsp start / stop"]
+    Rules["Frontend Logic<br/>ReconnectingWs + ByteTrack 事件<br/>Alert + Webhook + ROI + OSD"]
   end
 
-  subgraph InferenceEngineLayer["推理引擎层（Inference Engine Layer）"]
-    ModelRuntime["Ultralytics Runtime (YOLO)\n- Model hot-swap (.pt/.engine/.onnx)\n- Device switch (warmup-only)\n- NMS conf/iou\n- predict() / track(persist=True, ByteTrack)\n- masks.xy + keypoints 提取"]
-    VideoDecode["Media Decode/Encode\n- RTSP decode (OpenCV VideoCapture)\n- JPEG encode/decode"]
-    SysMon["System Monitor\n- psutil (CPU/Mem)\n- pynvml (GPU)\n- 推理延迟 ring buffer (P50/P95/P99)"]
+  subgraph InferenceEngineLayer["推理引擎层 Inference Engine Layer"]
+    ModelRuntime["Ultralytics Runtime YOLO<br/>Model hot-swap<br/>predict + track + masks + keypoints"]
+    VideoDecode["Media Decode/Encode<br/>RTSP decode OpenCV<br/>JPEG encode/decode"]
+    SysMon["System Monitor<br/>psutil CPU/Mem + pynvml GPU<br/>推理延迟 ring buffer"]
   end
 
-  subgraph DataLayer["数据层（Data Layer）"]
-    ModelRepo["Model Repository\n- backend/models/*"]
-    LogStore["Structured Log Store\n- In-memory ring buffer\n- CSV export"]
-    WebhookStore["Webhook Config\n- backend/.webhook.json"]
-    Artifacts["Artifacts (Local)\n- BadCase zip\n- Config JSON export"]
+  subgraph DataLayer["数据层 Data Layer"]
+    ModelRepo["Model Repository<br/>backend/models"]
+    LogStore["Structured Log Store<br/>In-memory ring buffer<br/>CSV export"]
+    WebhookStore["Webhook Config<br/>backend/.webhook.json"]
+    Artifacts["Artifacts Local<br/>BadCase zip + Config JSON"]
   end
 
   subgraph External["外部系统"]
-    Channels["Webhook Channels\n- 钉钉 / 企微 / 飞书 / Slack / Generic"]
+    Channels["Webhook Channels<br/>DingTalk / WeCom / Feishu / Slack / Generic"]
   end
 
   BrowserMedia --> UI
 
   UI -->|REST| ApiGateway
-  UI -->|WS Webcam frames| WsInfer
-  UI -->|WS RTSP 多路控制| WsStream
+  UI -->|WS Webcam| WsInfer
+  UI -->|WS RTSP| WsStream
   UI -->|UI rules| Rules
 
   ApiGateway --> ModelRuntime
@@ -252,13 +252,13 @@ flowchart TB
   WsStream --> LogStore
 
   Rules --> Artifacts
-  Rules -->|"POST /api/notify"| ApiGateway
-  ApiGateway -->|"httpx POST"| Channels
+  Rules -->|POST notify| ApiGateway
+  ApiGateway -->|httpx POST| Channels
 
   LogStore -->|export CSV| UI
   SysMon -->|stats poll| UI
-  WsInfer -->|preds/telemetry/logs| UI
-  WsStream -->|frames/preds/logs (streamId)| UI
+  WsInfer -->|preds telemetry| UI
+  WsStream -->|frames preds logs| UI
 ```
 
 ## FAQ

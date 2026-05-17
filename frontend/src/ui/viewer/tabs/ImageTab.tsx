@@ -175,6 +175,12 @@ export function ImageTab() {
           ROI
         </NeoButton>
         <NeoButton
+          onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })}
+          disabled={!roi.enabled}
+        >
+          {roi.mode === 'rect' ? '矩形' : '多边形'}
+        </NeoButton>
+        <NeoButton
           onClick={() => setRoi({ polygon: [], closed: false })}
           disabled={!roi.enabled || roi.polygon.length === 0}
         >

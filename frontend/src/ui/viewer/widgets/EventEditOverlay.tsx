@@ -36,6 +36,7 @@ export function EventEditOverlay(props: {
 }) {
   const eventsConfig = useConsoleStore((s) => s.eventsConfig)
   const setEventsConfig = useConsoleStore((s) => s.setEventsConfig)
+  const roiEnabled = useConsoleStore((s) => s.roi.enabled)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [previewLine, setPreviewLine] = useState<{ a: RoiPointXY; b?: RoiPointXY } | null>(null)
@@ -151,7 +152,7 @@ export function EventEditOverlay(props: {
   return (
     <canvas
       ref={canvasRef}
-      className={styles.canvas}
+      className={`${styles.canvas} ${roiEnabled ? '' : styles.active}`}
       onPointerMove={(e) => {
         const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
         const src = getSourceSize(props.anchorRef.current)

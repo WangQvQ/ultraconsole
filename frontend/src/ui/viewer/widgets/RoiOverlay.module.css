@@ -4,5 +4,6 @@
   z-index: 5;
   pointer-events: auto;
   cursor: crosshair;
+  touch-action: none;
 }
 

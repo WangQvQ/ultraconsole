@@ -27,6 +27,7 @@ export function VideoTab() {
   const urlRef = useRef<string | null>(null)
 
   const [running, setRunning] = useState(false)
+  const [videoLoaded, setVideoLoaded] = useState(false)
   const [targetFps, setTargetFps] = useState(8)
   const [dragOver, setDragOver] = useState(false)
   const targetFpsRef = useRef(targetFps)
@@ -123,6 +124,7 @@ export function VideoTab() {
     urlRef.current = url
     video.src = url
     await video.play().catch(() => {})
+    setVideoLoaded(true)
     pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'video.loaded', msg: file.name, fields: {} })
   }
 
@@ -174,8 +176,11 @@ export function VideoTab() {
 
         <div className={styles.divider} />
 
-        <NeoButton onClick={() => setRoi({ enabled: !roi.enabled })}>
+        <NeoButton onClick={() => setRoi({ enabled: !roi.enabled })} disabled={!videoLoaded}>
           ROI
+        </NeoButton>
+        <NeoButton onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })} disabled={!roi.enabled}>
+          {roi.mode === 'rect' ? '矩形' : '多边形'}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ polygon: [], closed: false })} disabled={!roi.enabled || roi.polygon.length === 0}>
           清除 ROI

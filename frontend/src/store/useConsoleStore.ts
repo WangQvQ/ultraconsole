@@ -153,11 +153,14 @@ export type AlertConfig = {
 
 export type RoiPoint = { x: number; y: number } // normalized 0..1
 
+export type RoiMode = 'rect' | 'poly'
+
 export type RoiState = {
   enabled: boolean
   polygon: RoiPoint[]
   closed: boolean
   applyFilter: boolean
+  mode: RoiMode
 }
 
 export type ConnState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
@@ -223,7 +226,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
   logs: [],
   alert: { active: false, streak: 0 },
   alertConfig: { enabled: false, minFrames: 5, sound: false },
-  roi: { enabled: false, polygon: [], closed: false, applyFilter: true },
+  roi: { enabled: false, polygon: [], closed: false, applyFilter: true, mode: 'rect' },
   connections: { inferWs: 'idle', rtspWs: 'idle' },
   telemetrySummary: {},
   systemStats: undefined,
