@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiListModels, apiSelectEngine, apiSelectModel, apiUpdateParams } from '../../api/client'
+import { useT } from '../../i18n'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { Card } from '../primitives/Card'
 import { NeoButton } from '../primitives/NeoButton'
 import styles from './ControlPanel.module.css'
 
 export function ControlPanel() {
+  const t = useT()
   const { engine, params, models, currentModelId, classes } = useConsoleStore()
   const setEngine = useConsoleStore((s) => s.setEngine)
   const setParams = useConsoleStore((s) => s.setParams)
@@ -73,7 +75,7 @@ export function ControlPanel() {
 
   return (
     <div className={styles.stack}>
-      <Card title="Model Hub" right={busy ? '切换中…' : undefined}>
+      <Card title="Model Hub" right={busy ? t('control.switching') : undefined}>
         <div className={styles.row}>
           <select
             className={styles.select}
@@ -82,7 +84,7 @@ export function ControlPanel() {
             disabled={busy}
           >
             <option value="" disabled>
-              请选择模型（backend/models）
+              {t('control.selectModelHint')}
             </option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -93,7 +95,7 @@ export function ControlPanel() {
         </div>
       </Card>
 
-      <Card title="Engine" right={engine.warming ? '预热中…' : engine.device.toUpperCase()}>
+      <Card title="Engine" right={engine.warming ? t('control.warming') : engine.device.toUpperCase()}>
         <div className={styles.row}>
           <NeoButton onClick={() => onToggleEngine('cpu')} disabled={engine.warming || engine.device === 'cpu'}>
             CPU
@@ -150,7 +152,7 @@ export function ControlPanel() {
 
       <Card title="Class Filter">
         {classOptions.length === 0 ? (
-          <div className={styles.hint}>选择模型后，这里会出现类别标签。</div>
+          <div className={styles.hint}>{t('control.classHint')}</div>
         ) : (
           <div className={styles.tags}>
             {classOptions.map((c) => {
@@ -186,12 +188,12 @@ export function ControlPanel() {
               flushParams(next)
             }}
           />
-          启用 ByteTrack 跟踪（Webcam / RTSP）
+          {t('control.enableTracking')}
         </label>
         <div className={styles.hint}>
-          开启后 bbox 会带 trackId、轨迹 & 计数线/区域生效。
+          {t('control.trackingHint')}
           <br />
-          画线/区域：在画面右键菜单切换"Line / Zone"工具，或使用 ROI 工具旁的快捷按钮。
+          {t('control.drawLineHint')}
         </div>
       </Card>
     </div>

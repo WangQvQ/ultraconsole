@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { wsInferUrl, type WsLogMessage, type WsPredMessage } from '../../../api/client'
+import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { downloadBadCaseZip } from '../../../utils/badcase'
 import { createReconnectingWs, type ReconnectingWs, type WsState as RWsState } from '../../../utils/reconnectWs'
@@ -14,6 +15,7 @@ import styles from './WebcamTab.module.css'
 type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
 export function WebcamTab() {
+  const t = useT()
   const params = useConsoleStore((s) => s.params)
   const osd = useConsoleStore((s) => s.osd)
   const setOSD = useConsoleStore((s) => s.setOSD)
@@ -246,20 +248,20 @@ export function WebcamTab() {
     <div className={styles.wrap}>
       <div className={styles.toolbar}>
         {!previewing ? (
-          <NeoButton onClick={() => void startPreview()}>启动预览</NeoButton>
+          <NeoButton onClick={() => void startPreview()}>{t('webcam.startPreview')}</NeoButton>
         ) : (
           <NeoButton tone="danger" onClick={() => void stopAll()}>
-            停止预览
+            {t('webcam.stopPreview')}
           </NeoButton>
         )}
 
         {!inferring ? (
           <NeoButton onClick={() => void startInfer()} disabled={!previewing}>
-            开始推理
+            {t('common.startInfer')}
           </NeoButton>
         ) : (
           <NeoButton tone="danger" onClick={() => void stopInfer()}>
-            停止推理
+            {t('webcam.stopInfer')}
           </NeoButton>
         )}
 
@@ -324,13 +326,13 @@ export function WebcamTab() {
           ROI
         </NeoButton>
         <NeoButton onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })} disabled={!roi.enabled}>
-          {roi.mode === 'rect' ? '矩形' : '多边形'}
+          {roi.mode === 'rect' ? t('common.rectangle') : t('common.polygon')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ polygon: [], closed: false })} disabled={!roi.enabled || roi.polygon.length === 0}>
-          清除 ROI
+          {t('common.clearRoi')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ closed: false })} disabled={!roi.enabled || !roi.closed}>
-          继续编辑
+          {t('common.continueEdit')}
         </NeoButton>
         <label className={styles.toggle}>
           <input
@@ -339,7 +341,7 @@ export function WebcamTab() {
             onChange={(e) => setRoi({ applyFilter: e.target.checked })}
             disabled={!roi.enabled}
           />
-          仅显示 ROI 内
+          {t('common.showOnlyInsideRoi')}
         </label>
 
         <label className={styles.toggle}>
@@ -353,6 +355,10 @@ export function WebcamTab() {
             onChange={() => setOSD({ labels: !osd.labels })}
           />
           Labels
+        </label>
+        <label className={styles.toggle}>
+          <input type="checkbox" checked={osd.heatmap} onChange={() => setOSD({ heatmap: !osd.heatmap })} />
+          {t('common.heatmap')}
         </label>
 
         <div className={styles.divider} />
@@ -375,7 +381,7 @@ export function WebcamTab() {
 
       <div className={[styles.stage, alertActive ? styles.alertOn : ''].join(' ')}>
         <video ref={videoRef} className={styles.video} muted playsInline />
-        <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
+        <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
         <RoiOverlay anchorRef={videoRef} />
         <EventEditOverlay
           anchorRef={videoRef}

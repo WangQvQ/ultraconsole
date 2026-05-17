@@ -253,7 +253,7 @@ async def infer_image(file: UploadFile = File(...)) -> PredResponse:
     p = state.params
     t0 = time.time()
     try:
-        pred = await asyncio.to_thread(_run_infer, img, p.conf, p.iou, list(p.classFilter))
+        pred = await asyncio.to_thread(_run_infer, img, p.conf, p.iou, list(p.classFilter), p.track, "rest-frame")
         state.logs.append(level="INFO", event="infer.image", msg="Image inferred", fields={"dtMs": int((time.time() - t0) * 1000)})
         return pred
     except Exception as e:

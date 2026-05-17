@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { apiNotify, type NotifyKind, type NotifyRequest } from '../api/client'
 import { useConsoleStore, type EventEntry } from '../store/useConsoleStore'
+import { t } from '../i18n'
 
 /**
  * 监听 alert.active 与 events 增量，按需 POST /api/notify。
@@ -27,7 +28,7 @@ export function useWebhookDispatcher() {
       const req: NotifyRequest = {
         kind: 'alert',
         level: 'WARN',
-        title: '告警触发',
+        title: t('notify.alertTriggered'),
         msg: alert.reason || `class=${alertConfig.targetClass} streak=${alert.streak}`,
         ref: alertConfig.targetClass || 'alert',
         fields: {
@@ -65,10 +66,10 @@ export function useWebhookDispatcher() {
                 : eventsConfig.zones.find((z) => z.id === ref)?.name || ref
             const title =
               e.kind === 'line.cross'
-                ? `计数线 ${name} ${e.direction ?? ''}`
+                ? t('notify.lineCross', { name, direction: e.direction ?? '' })
                 : e.kind === 'zone.enter'
-                  ? `进入区域 ${name}`
-                  : `离开区域 ${name}`
+                  ? t('notify.zoneEnter', { name })
+                  : t('notify.zoneLeave', { name })
             const req: NotifyRequest = {
               kind,
               level: 'WARN',

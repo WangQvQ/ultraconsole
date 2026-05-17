@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../../i18n'
 import {
   apiGetWebhook,
   apiSetWebhook,
@@ -13,12 +14,12 @@ import { Card } from '../primitives/Card'
 import { NeoButton } from '../primitives/NeoButton'
 import styles from './WebhookCard.module.css'
 
-const FORMAT_OPTIONS: { value: WebhookFormat; label: string }[] = [
-  { value: 'generic', label: '通用 JSON' },
-  { value: 'dingtalk', label: '钉钉' },
-  { value: 'wecom', label: '企业微信' },
-  { value: 'feishu', label: '飞书' },
-  { value: 'slack', label: 'Slack' },
+const FORMAT_OPTIONS: { value: WebhookFormat; labelKey: string }[] = [
+  { value: 'generic', labelKey: 'webhook.genericJson' },
+  { value: 'dingtalk', labelKey: 'webhook.dingtalk' },
+  { value: 'wecom', labelKey: 'webhook.wecom' },
+  { value: 'feishu', labelKey: 'webhook.feishu' },
+  { value: 'slack', labelKey: 'Slack' },
 ]
 
 const LEVELS: LevelType[] = ['INFO', 'WARN', 'ERROR']
@@ -35,6 +36,7 @@ const DEFAULT_CFG: WebhookConfig = {
 }
 
 export function WebhookCard() {
+  const t = useT()
   const pushLog = useConsoleStore((s) => s.pushLog)
   const [cfg, setCfg] = useState<WebhookConfig>(DEFAULT_CFG)
   const [loaded, setLoaded] = useState(false)
@@ -66,7 +68,7 @@ export function WebhookCard() {
   }
 
   async function onTest() {
-    setTestStatus('发送中…')
+    setTestStatus(t('webhook.sending'))
     try {
       const res = await apiTestWebhook()
       if (res.ok) {
@@ -89,7 +91,7 @@ export function WebhookCard() {
   }
 
   return (
-    <Card title="Webhook" right={cfg.enabled ? '已启用' : '未启用'}>
+    <Card title="Webhook" right={cfg.enabled ? t('webhook.enabled') : t('webhook.disabled')}>
       <div className={styles.stack}>
         <label className={styles.toggle}>
           <input
@@ -98,7 +100,7 @@ export function WebhookCard() {
             onChange={(e) => void save({ enabled: e.target.checked })}
             disabled={busy}
           />
-          启用
+          {t('common.enable')}
         </label>
 
         <div className={styles.field}>
@@ -114,7 +116,7 @@ export function WebhookCard() {
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span className={styles.label}>格式</span>
+            <span className={styles.label}>{t('webhook.format')}</span>
             <select
               className={styles.select}
               value={cfg.format}
@@ -122,13 +124,13 @@ export function WebhookCard() {
             >
               {FORMAT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label}
+                  {t(o.labelKey)}
                 </option>
               ))}
             </select>
           </label>
           <label className={styles.field}>
-            <span className={styles.label}>最低等级</span>
+            <span className={styles.label}>{t('webhook.minLevel')}</span>
             <select
               className={styles.select}
               value={cfg.minLevel}
@@ -145,7 +147,7 @@ export function WebhookCard() {
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span className={styles.label}>冷却(秒)</span>
+            <span className={styles.label}>{t('webhook.cooldown')}</span>
             <input
               className={styles.num}
               type="number"
@@ -157,7 +159,7 @@ export function WebhookCard() {
             />
           </label>
           <label className={styles.field}>
-            <span className={styles.label}>超时(秒)</span>
+            <span className={styles.label}>{t('webhook.timeout')}</span>
             <input
               className={styles.num}
               type="number"
@@ -171,7 +173,7 @@ export function WebhookCard() {
         </div>
 
         <div className={styles.tags}>
-          <span className={styles.label}>事件类型</span>
+          <span className={styles.label}>{t('webhook.eventTypes')}</span>
           {KINDS.map((k) => {
             const on = cfg.includeKinds.includes(k)
             return (
@@ -189,13 +191,13 @@ export function WebhookCard() {
 
         <div className={styles.actionsRow}>
           <NeoButton onClick={onTest} disabled={!cfg.enabled || !cfg.url} style={{ padding: '6px 10px', fontSize: 12 }}>
-            发送测试
+            {t('webhook.sendTest')}
           </NeoButton>
           <span className={styles.testStatus}>{testStatus}</span>
         </div>
 
         <div className={styles.hint}>
-          后端会按所选格式发 JSON。冷却按 (kind, ref) 维度去重，避免反复刷屏。
+          {t('webhook.hint')}
         </div>
       </div>
     </Card>

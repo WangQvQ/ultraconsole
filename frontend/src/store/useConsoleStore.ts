@@ -7,6 +7,7 @@ export type OSDFlags = {
   masks: boolean
   keypoints: boolean
   labels: boolean
+  heatmap: boolean
 }
 
 export type Params = {
@@ -215,7 +216,7 @@ type ConsoleState = {
 export const useConsoleStore = create<ConsoleState>((set, get) => ({
   engine: { device: 'cpu', warming: false },
   params: { conf: 0.25, iou: 0.7, classFilter: [], track: false },
-  osd: { bbox: true, masks: true, keypoints: true, labels: true },
+  osd: { bbox: true, masks: true, keypoints: true, labels: true, heatmap: false },
 
   models: [],
   currentModelId: undefined,

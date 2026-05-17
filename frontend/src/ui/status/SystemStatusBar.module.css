@@ -59,3 +59,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+.langBtn {
+  background: none;
+  border: 1px solid var(--line-0);
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.langBtn:hover {
+  border-color: var(--accent);
+  color: var(--fg-0);
+}
+

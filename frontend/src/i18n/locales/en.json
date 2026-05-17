@@ -1,0 +1,97 @@
+{
+  "common": {
+    "rectangle": "Rect",
+    "polygon": "Polygon",
+    "clearRoi": "Clear ROI",
+    "continueEdit": "Continue",
+    "showOnlyInsideRoi": "ROI filter",
+    "heatmap": "Heatmap",
+    "startInfer": "Start",
+    "stop": "Stop",
+    "enable": "Enable",
+    "clear": "Clear"
+  },
+  "control": {
+    "switching": "Switching…",
+    "selectModelHint": "Select model (backend/models)",
+    "warming": "Warming up…",
+    "classHint": "Class labels appear after selecting a model.",
+    "enableTracking": "Enable ByteTrack (Webcam / RTSP)",
+    "trackingHint": "Enables trackId on bboxes, trails & counting lines/zones.",
+    "drawLineHint": "Draw lines/zones via right-click menu or the buttons next to ROI tool."
+  },
+  "image": {
+    "selectImage": "Select Image",
+    "clear": "Clear",
+    "dragHint": "Drag image here, or click \"Select Image\".",
+    "dropHint": "Release to load image",
+    "inferring": "Inferring…"
+  },
+  "video": {
+    "selectVideo": "Select Video",
+    "dropHint": "Release to load video"
+  },
+  "webcam": {
+    "startPreview": "Preview",
+    "stopPreview": "Stop Preview",
+    "stopInfer": "Stop",
+    "connecting": "Connecting…"
+  },
+  "rtsp": {
+    "start": "Start",
+    "emptyHint": "Enter RTSP address and click \"Start\"."
+  },
+  "wall": {
+    "grid": "Grid",
+    "startAll": "Start All",
+    "stopAll": "Stop All",
+    "emptyHint": "Enter RTSP address and click Start"
+  },
+  "monitor": {
+    "reset": "Reset",
+    "countersHint": "Enable Tracking and draw counting lines/zones on the canvas to see stats here.",
+    "class": "Class",
+    "pleaseSelect": "(Select)",
+    "sound": "Sound",
+    "alertRule": "Rule: Alert triggers when target class appears for ≥ N consecutive frames.",
+    "exportCsv": "Export CSV",
+    "noLogs": "No logs yet (appears after model selection / inference).",
+    "alertReason": "{{cls}} for {{streak}} frames"
+  },
+  "webhook": {
+    "genericJson": "Generic JSON",
+    "dingtalk": "DingTalk",
+    "wecom": "WeCom",
+    "feishu": "Feishu",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "format": "Format",
+    "minLevel": "Min Level",
+    "cooldown": "Cooldown (s)",
+    "timeout": "Timeout (s)",
+    "eventTypes": "Event Types",
+    "sendTest": "Send Test",
+    "sending": "Sending…",
+    "hint": "Backend sends JSON in selected format. Cooldown deduplicates by (kind, ref) to prevent spam."
+  },
+  "config": {
+    "exported": "Exported",
+    "parsing": "Parsing…",
+    "applied": "Applied {{count}} items",
+    "partialFail": "Partial failure: {{errors}}",
+    "processing": "Processing…",
+    "exportJson": "Export JSON",
+    "importJson": "Import JSON",
+    "dragHint": "Drag JSON here. Includes: model params / engine / OSD / ROI / counting lines-zones / alerts / Webhook"
+  },
+  "stats": {
+    "collecting": "Collecting…",
+    "gpuUnavailable": "None / NVML unavailable"
+  },
+  "notify": {
+    "alertTriggered": "Alert Triggered",
+    "lineCross": "Line {{name}} {{direction}}",
+    "zoneEnter": "Entered zone {{name}}",
+    "zoneLeave": "Left zone {{name}}"
+  }
+}

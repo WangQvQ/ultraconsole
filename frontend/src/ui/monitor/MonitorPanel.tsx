@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { apiExportLogsCsv } from '../../api/client'
+import { useT } from '../../i18n'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { useEventTracker } from '../../utils/useEventTracker'
 import { useSystemStats } from '../../utils/useSystemStats'
@@ -12,6 +13,7 @@ import { WebhookCard } from './WebhookCard'
 import styles from './MonitorPanel.module.css'
 
 export function MonitorPanel() {
+  const t = useT()
   const logs = useConsoleStore((s) => s.logs)
   const classes = useConsoleStore((s) => s.classes)
   const lastPred = useConsoleStore((s) => s.lastPred)
@@ -69,7 +71,7 @@ export function MonitorPanel() {
         setAlert({
           streak: nextStreak,
           active: nextActive,
-          reason: nextActive ? `${alertConfig.targetClass} 连续 ${nextStreak} 帧` : undefined,
+          reason: nextActive ? t('monitor.alertReason', { cls: alertConfig.targetClass ?? '', streak: nextStreak }) : undefined,
         })
         if (!prevActiveRef.current && nextActive) {
           pushLog({
@@ -122,12 +124,12 @@ export function MonitorPanel() {
         title="Counters / Events"
         right={
           <NeoButton onClick={resetCounters} style={{ padding: '6px 10px', fontSize: 11 }}>
-            重置
+            {t('monitor.reset')}
           </NeoButton>
         }
       >
         {eventsConfig.lines.length === 0 && eventsConfig.zones.length === 0 ? (
-          <div className={styles.hint}>启用 Tracking 并在画面上画"计数线"或"区域"后，这里会出现统计。</div>
+          <div className={styles.hint}>{t('monitor.countersHint')}</div>
         ) : (
           <div className={styles.countersBox}>
             {eventsConfig.lines.map((l) => {
@@ -181,18 +183,18 @@ export function MonitorPanel() {
               checked={alertConfig.enabled}
               onChange={(e) => setAlertConfig({ enabled: e.target.checked })}
             />
-            启用
+            {t('common.enable')}
           </label>
 
           <label className={styles.toggle}>
-            类别
+            {t('monitor.class')}
             <select
               className={styles.select}
               value={alertConfig.targetClass || ''}
               onChange={(e) => setAlertConfig({ targetClass: e.target.value || undefined })}
               disabled={!alertConfig.enabled}
             >
-              <option value="">(请选择)</option>
+              <option value="">{t('monitor.pleaseSelect')}</option>
               {classes.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -221,7 +223,7 @@ export function MonitorPanel() {
               onChange={(e) => setAlertConfig({ sound: e.target.checked })}
               disabled={!alertConfig.enabled}
             />
-            声音
+            {t('monitor.sound')}
           </label>
 
           <div className={styles.spacer} />
@@ -230,23 +232,23 @@ export function MonitorPanel() {
             onClick={() => setAlert({ active: false, streak: 0, reason: undefined })}
             style={{ padding: '8px 10px', fontSize: 12 }}
           >
-            清除
+            {t('common.clear')}
           </NeoButton>
         </div>
-        <div className={styles.hint}>规则：目标类别出现且连续帧数 ≥ N 即触发告警。</div>
+        <div className={styles.hint}>{t('monitor.alertRule')}</div>
       </Card>
 
       <Card
         title="Event Logger"
         right={
           <NeoButton onClick={onExport} style={{ padding: '8px 10px', fontSize: 12 }}>
-            导出 CSV
+            {t('monitor.exportCsv')}
           </NeoButton>
         }
       >
         <div className={styles.logBox}>
           {logs.length === 0 ? (
-            <div className={styles.hint}>暂无日志（选择模型/推理后会出现）。</div>
+            <div className={styles.hint}>{t('monitor.noLogs')}</div>
           ) : (
             logs
               .slice()

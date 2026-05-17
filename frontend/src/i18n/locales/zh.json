@@ -1,0 +1,97 @@
+{
+  "common": {
+    "rectangle": "矩形",
+    "polygon": "多边形",
+    "clearRoi": "清除 ROI",
+    "continueEdit": "继续编辑",
+    "showOnlyInsideRoi": "仅显示 ROI 内",
+    "heatmap": "热力图",
+    "startInfer": "开始推理",
+    "stop": "停止",
+    "enable": "启用",
+    "clear": "清除"
+  },
+  "control": {
+    "switching": "切换中…",
+    "selectModelHint": "请选择模型（backend/models）",
+    "warming": "预热中…",
+    "classHint": "选择模型后，这里会出现类别标签。",
+    "enableTracking": "启用 ByteTrack 跟踪（Webcam / RTSP）",
+    "trackingHint": "开启后 bbox 会带 trackId、轨迹 & 计数线/区域生效。",
+    "drawLineHint": "画线/区域：在画面右键菜单切换\"Line / Zone\"工具，或使用 ROI 工具旁的快捷按钮。"
+  },
+  "image": {
+    "selectImage": "选择图片",
+    "clear": "清空",
+    "dragHint": "拖拽图片到此处，或点击「选择图片」。",
+    "dropHint": "松开以载入图片",
+    "inferring": "推理中…"
+  },
+  "video": {
+    "selectVideo": "选择视频",
+    "dropHint": "松开以载入视频"
+  },
+  "webcam": {
+    "startPreview": "启动预览",
+    "stopPreview": "停止预览",
+    "stopInfer": "停止推理",
+    "connecting": "连接中…"
+  },
+  "rtsp": {
+    "start": "开始",
+    "emptyHint": "填入 RTSP 地址后点击\"开始\"。"
+  },
+  "wall": {
+    "grid": "网格",
+    "startAll": "全部开始",
+    "stopAll": "全部停止",
+    "emptyHint": "填 RTSP 地址后点开始"
+  },
+  "monitor": {
+    "reset": "重置",
+    "countersHint": "启用 Tracking 并在画面上画\"计数线\"或\"区域\"后，这里会出现统计。",
+    "class": "类别",
+    "pleaseSelect": "(请选择)",
+    "sound": "声音",
+    "alertRule": "规则：目标类别出现且连续帧数 ≥ N 即触发告警。",
+    "exportCsv": "导出 CSV",
+    "noLogs": "暂无日志（选择模型/推理后会出现）。",
+    "alertReason": "{{cls}} 连续 {{streak}} 帧"
+  },
+  "webhook": {
+    "genericJson": "通用 JSON",
+    "dingtalk": "钉钉",
+    "wecom": "企业微信",
+    "feishu": "飞书",
+    "enabled": "已启用",
+    "disabled": "未启用",
+    "format": "格式",
+    "minLevel": "最低等级",
+    "cooldown": "冷却(秒)",
+    "timeout": "超时(秒)",
+    "eventTypes": "事件类型",
+    "sendTest": "发送测试",
+    "sending": "发送中…",
+    "hint": "后端会按所选格式发 JSON。冷却按 (kind, ref) 维度去重，避免反复刷屏。"
+  },
+  "config": {
+    "exported": "已导出",
+    "parsing": "解析中…",
+    "applied": "已应用 {{count}} 项",
+    "partialFail": "部分失败：{{errors}}",
+    "processing": "处理中…",
+    "exportJson": "导出 JSON",
+    "importJson": "导入 JSON",
+    "dragHint": "也可以直接把 JSON 拖到这里。包含：模型参数 / 引擎 / OSD / ROI / 计数线区 / 告警 / Webhook"
+  },
+  "stats": {
+    "collecting": "采集中…",
+    "gpuUnavailable": "无 / NVML 不可用"
+  },
+  "notify": {
+    "alertTriggered": "告警触发",
+    "lineCross": "计数线 {{name}} {{direction}}",
+    "zoneEnter": "进入区域 {{name}}",
+    "zoneLeave": "离开区域 {{name}}"
+  }
+}

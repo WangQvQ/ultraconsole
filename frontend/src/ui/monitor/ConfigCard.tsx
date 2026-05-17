@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useT } from '../../i18n'
 import { applyConfig, exportConfigDownload } from '../../utils/configIO'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { Card } from '../primitives/Card'
@@ -6,6 +7,7 @@ import { NeoButton } from '../primitives/NeoButton'
 import styles from './ConfigCard.module.css'
 
 export function ConfigCard() {
+  const t = useT()
   const pushLog = useConsoleStore((s) => s.pushLog)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
@@ -16,7 +18,7 @@ export function ConfigCard() {
     setBusy(true)
     try {
       await exportConfigDownload()
-      setStatus('✅ 已导出')
+      setStatus(`✅ ${t('config.exported')}`)
     } catch (e) {
       setStatus(`❌ ${e}`)
     } finally {
@@ -26,13 +28,13 @@ export function ConfigCard() {
 
   async function onImportFile(file: File) {
     setBusy(true)
-    setStatus('解析中…')
+    setStatus(t('config.parsing'))
     try {
       const text = await file.text()
       const json = JSON.parse(text)
       const res = await applyConfig(json)
       if (res.ok) {
-        setStatus(`✅ 已应用 ${res.applied.length} 项`)
+        setStatus(`✅ ${t('config.applied', { count: res.applied.length })}`)
         pushLog({
           ts: Date.now() / 1000,
           level: 'INFO',
@@ -41,7 +43,7 @@ export function ConfigCard() {
           fields: { applied: res.applied },
         })
       } else {
-        setStatus(`⚠️ 部分失败：${res.errors.map((e) => e.key).join(', ')}`)
+        setStatus(`⚠️ ${t('config.partialFail', { errors: res.errors.map((e) => e.key).join(', ') })}`)
         pushLog({
           ts: Date.now() / 1000,
           level: 'WARN',
@@ -59,7 +61,7 @@ export function ConfigCard() {
   }
 
   return (
-    <Card title="Config Import / Export" right={busy ? '处理中…' : undefined}>
+    <Card title="Config Import / Export" right={busy ? t('config.processing') : undefined}>
       <div
         className={[styles.dropZone, dragOver ? styles.dropOver : ''].join(' ')}
         onDragOver={(e) => {
@@ -79,14 +81,14 @@ export function ConfigCard() {
       >
         <div className={styles.row}>
           <NeoButton onClick={onExport} disabled={busy} style={{ padding: '6px 10px', fontSize: 12 }}>
-            ⬇ 导出 JSON
+            ⬇ {t('config.exportJson')}
           </NeoButton>
           <NeoButton
             onClick={() => fileRef.current?.click()}
             disabled={busy}
             style={{ padding: '6px 10px', fontSize: 12 }}
           >
-            ⬆ 导入 JSON
+            ⬆ {t('config.importJson')}
           </NeoButton>
           <input
             ref={fileRef}
@@ -101,7 +103,7 @@ export function ConfigCard() {
           />
         </div>
         <div className={styles.hint}>
-          也可以直接把 JSON 拖到这里。包含：模型参数 / 引擎 / OSD / ROI / 计数线区 / 告警 / Webhook
+          {t('config.dragHint')}
         </div>
         <div className={styles.status}>{status}</div>
       </div>

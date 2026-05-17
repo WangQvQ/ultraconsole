@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { wsStreamUrl } from '../../../api/client'
+import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { createReconnectingWs, type ReconnectingWs, type WsState as RWsState } from '../../../utils/reconnectWs'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
@@ -21,6 +22,7 @@ function b64ToBlobUrl(b64: string) {
 }
 
 export function RtspTab() {
+  const t = useT()
   const params = useConsoleStore((s) => s.params)
   const osd = useConsoleStore((s) => s.osd)
   const setOSD = useConsoleStore((s) => s.setOSD)
@@ -190,10 +192,10 @@ export function RtspTab() {
         <input className={styles.input} value={url} onChange={(e) => setUrl(e.target.value)} disabled={running} />
 
         {!running ? (
-          <NeoButton onClick={start}>开始</NeoButton>
+          <NeoButton onClick={start}>{t('rtsp.start')}</NeoButton>
         ) : (
           <NeoButton tone="danger" onClick={stop}>
-            停止
+            {t('common.stop')}
           </NeoButton>
         )}
 
@@ -226,6 +228,10 @@ export function RtspTab() {
           <input type="checkbox" checked={osd.labels} onChange={() => setOSD({ labels: !osd.labels })} />
           Labels
         </label>
+        <label className={styles.toggle}>
+          <input type="checkbox" checked={osd.heatmap} onChange={() => setOSD({ heatmap: !osd.heatmap })} />
+          {t('common.heatmap')}
+        </label>
 
         <div className={styles.divider} />
 
@@ -247,13 +253,13 @@ export function RtspTab() {
           ROI
         </NeoButton>
         <NeoButton onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })} disabled={!roi.enabled}>
-          {roi.mode === 'rect' ? '矩形' : '多边形'}
+          {roi.mode === 'rect' ? t('common.rectangle') : t('common.polygon')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ polygon: [], closed: false })} disabled={!roi.enabled || roi.polygon.length === 0}>
-          清除 ROI
+          {t('common.clearRoi')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ closed: false })} disabled={!roi.enabled || !roi.closed}>
-          继续编辑
+          {t('common.continueEdit')}
         </NeoButton>
         <label className={styles.toggle}>
           <input
@@ -262,7 +268,7 @@ export function RtspTab() {
             onChange={(e) => setRoi({ applyFilter: e.target.checked })}
             disabled={!roi.enabled}
           />
-          仅显示 ROI 内
+          {t('common.showOnlyInsideRoi')}
         </label>
 
         <div className={styles.spacer} />
@@ -273,7 +279,7 @@ export function RtspTab() {
         {frameUrl ? (
           <>
             <img ref={imgRef} className={styles.img} src={frameUrl} alt="" />
-            <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
+            <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
             <RoiOverlay anchorRef={imgRef} />
             <EventEditOverlay
               anchorRef={imgRef}
@@ -283,7 +289,7 @@ export function RtspTab() {
             <TelemetryHUD telemetry={filteredPred?.telemetry} />
           </>
         ) : (
-          <div className={styles.empty}>填入 RTSP 地址后点击“开始”。</div>
+          <div className={styles.empty}>{t('rtsp.emptyHint')}</div>
         )}
       </div>
     </div>

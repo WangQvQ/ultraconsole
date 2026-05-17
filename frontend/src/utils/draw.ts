@@ -227,3 +227,44 @@ export function drawTrails(ctx: CanvasRenderingContext2D, trail: TrailMap, fc: F
     ctx.stroke()
   }
 }
+
+// ---- 热力图（基于 TrailMap 聚合） ----
+function heatColor(ratio: number): string {
+  // ratio 0→1 映射 蓝(240°)→青(180°)→绿(120°)→黄(60°)→红(0°)
+  const hue = (1 - ratio) * 240
+  return `hsla(${hue}, 90%, 50%, ${0.15 + ratio * 0.55})`
+}
+
+export function drawHeatmap(
+  ctx: CanvasRenderingContext2D,
+  trail: TrailMap,
+  fc: FitContain,
+  gridW = 64,
+  gridH = 64,
+) {
+  // 1. 聚合所有轨迹点到网格
+  const grid = new Float32Array(gridW * gridH)
+  let max = 0
+  for (const [, pts] of trail) {
+    for (const p of pts) {
+      const gx = Math.min(gridW - 1, Math.floor(p.x * gridW))
+      const gy = Math.min(gridH - 1, Math.floor(p.y * gridH))
+      const idx = gy * gridW + gx
+      grid[idx]++
+      if (grid[idx] > max) max = grid[idx]
+    }
+  }
+  if (max === 0) return
+
+  // 2. 渲染每个 bin
+  const binW = fc.drawW / gridW
+  const binH = fc.drawH / gridH
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      const v = grid[gy * gridW + gx]
+      if (v === 0) continue
+      ctx.fillStyle = heatColor(v / max)
+      ctx.fillRect(fc.offX + gx * binW, fc.offY + gy * binH, binW + 0.5, binH + 0.5)
+    }
+  }
+}

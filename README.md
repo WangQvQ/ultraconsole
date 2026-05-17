@@ -1,6 +1,39 @@
 # Ultralytics 工业级前端推理控制台
 
-面向工业质检 / 安防监控 / 算法调优场景的 **通用目标检测可视化控制台**：模型热切换、参数热更新、Image/Video/Webcam/RTSP/多路监控墙输入、OSD 叠加（含分割/姿态）、ByteTrack 跟踪 + 越线/区域计数事件、GPU/CPU/延迟监控、Webhook 告警出系统、配置一键导入导出、WebSocket 自动重连。
+**中文** | [English](README_EN.md)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white&style=flat-square" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white&style=flat-square" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-8.0-646CFF?logo=vite&logoColor=white&style=flat-square" alt="Vite" />
+  <img src="https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white&style=flat-square" alt="Python" />
+  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Ultralytics-YOLOv8-FF6B00?logo=ultralytics&logoColor=white&style=flat-square" alt="YOLOv8" />
+  <img src="https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white&style=flat-square" alt="OpenCV" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/WangQvQ/ultraconsole/blob/main/LICENSE"><img src="https://img.shields.io/github/license/WangQvQ/ultraconsole?style=flat-square&color=blue" alt="License" /></a>
+  <a href="https://github.com/WangQvQ/ultraconsole/stargazers"><img src="https://img.shields.io/github/stars/WangQvQ/ultraconsole?style=flat-square&color=yellow" alt="Stars" /></a>
+  <a href="https://github.com/WangQvQ/ultraconsole/issues"><img src="https://img.shields.io/github/issues/WangQvQ/ultraconsole?style=flat-square&color=red" alt="Issues" /></a>
+  <a href="https://github.com/WangQvQ/ultraconsole/commits"><img src="https://img.shields.io/github/last-commit/WangQvQ/ultraconsole?style=flat-square&color=green" alt="Last Commit" /></a>
+  <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/YOLOv8-Detection-FF6B00?style=flat-square&logo=ultralytics&logoColor=white" alt="Detection" />
+  <img src="https://img.shields.io/badge/Segmentation-Instance-8B5CF6?style=flat-square" alt="Segmentation" />
+  <img src="https://img.shields.io/badge/Pose-COCO_17-EC4899?style=flat-square" alt="Pose" />
+  <img src="https://img.shields.io/badge/ByteTrack-Tracking-10B981?style=flat-square" alt="ByteTrack" />
+  <img src="https://img.shields.io/badge/RTSP-Live_Stream-F43F5E?style=flat-square" alt="RTSP" />
+  <img src="https://img.shields.io/badge/Multi--GPU-CUDA-76B900?logo=nvidia&logoColor=white&style=flat-square" alt="Multi-GPU" />
+  <img src="https://img.shields.io/badge/WebSocket-Real--Time-FFA500?style=flat-square" alt="WebSocket" />
+  <img src="https://img.shields.io/badge/Webhook-Alert-9333EA?style=flat-square" alt="Webhook" />
+  <img src="https://img.shields.io/badge/i18n-中英双语-2563EB?style=flat-square" alt="i18n" />
+  <img src="https://img.shields.io/badge/Heatmap-Spatial-EAB308?style=flat-square" alt="Heatmap" />
+</p>
+
+面向工业质检 / 安防监控 / 算法调优场景的 **通用目标检测可视化控制台**：模型热切换、参数热更新、Image/Video/Webcam/RTSP/多路监控墙输入、OSD 叠加（含分割/姿态）、ByteTrack 跟踪 + 越线/区域计数事件、空间热力图、GPU/CPU/延迟监控、Webhook 告警出系统、配置一键导入导出、WebSocket 自动重连。
 
 ## 页面预览（Screenshot）
 
@@ -19,6 +52,7 @@
 - **断网自愈**：WebSocket 指数退避自动重连 + 心跳 ping/pong，重连后自动续播 RTSP，无需手动操作。
 - **配置可迁移**：一键导出 JSON（参数/引擎/OSD/ROI/计数线区/告警/Webhook 全套），到另一台机拖拽即生效。
 - **可替换推理内核**：默认 `pip install ultralytics`，支持切换到你"魔改版 ultralytics"。
+- **中英双语**：界面支持中文/英文一键切换（顶栏 `中/EN` 按钮），默认中文；README 提供中英双语版本。
 
 ## 功能一览
 
@@ -82,6 +116,7 @@ frontend/                   # React 19 + Vite + TypeScript + zustand
     │   └── primitives/     # Card / NeoButton
     ├── store/              # zustand 全局 store
     ├── api/                # REST + WS URL 工具
+    ├── i18n/               # 国际化（中文/英文）
     └── utils/              # draw / events / roi / configIO / reconnectWs /
                             # useEventTracker / useSystemStats /
                             # useWebhookDispatcher / badcase
@@ -290,4 +325,5 @@ V1 优先"可用与易集成"：前端只需填地址即可出画面；后续如
   - Feature：建议先开 Issue 讨论接口与交互
 - 路线图（已落地以 ✅ 标）：
   - ✅ 多路监控墙、ByteTrack + 事件、分割/姿态、GPU/CPU HUD、延迟分位、Webhook、WS 重连、拖拽上传、配置导入导出
-  - ⏳ 模型 A/B 对比、Tracking 热力图、Docker Compose、SQLite 持久化、Bearer Token 鉴权、i18n、截图导出、插件系统
+  - ✅ 中英双语 i18n
+  - ⏳ 模型 A/B 对比、Tracking 热力图、Docker Compose、SQLite 持久化、Bearer Token 鉴权、截图导出、插件系统

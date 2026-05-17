@@ -4,6 +4,7 @@ import {
   drawBoxes,
   drawCountingLines,
   drawCountingZones,
+  drawHeatmap,
   drawKeypoints,
   drawMasks,
   drawTrails,
@@ -22,6 +23,7 @@ export function VideoCanvasOverlay(props: {
   showMasks?: boolean
   showKeypoints?: boolean
   showTrails?: boolean
+  showHeatmap?: boolean
   drawEvents?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -35,6 +37,7 @@ export function VideoCanvasOverlay(props: {
     showMasks: props.showMasks ?? true,
     showKeypoints: props.showKeypoints ?? true,
     showTrails: props.showTrails ?? true,
+    showHeatmap: props.showHeatmap ?? false,
     drawEvents: props.drawEvents ?? true,
   })
   const eventsRef = useRef(eventsConfig)
@@ -68,9 +71,10 @@ export function VideoCanvasOverlay(props: {
       showMasks: props.showMasks ?? true,
       showKeypoints: props.showKeypoints ?? true,
       showTrails: props.showTrails ?? true,
+      showHeatmap: props.showHeatmap ?? false,
       drawEvents: props.drawEvents ?? true,
     }
-  }, [props.showBBox, props.showLabels, props.showMasks, props.showKeypoints, props.showTrails, props.drawEvents])
+  }, [props.showBBox, props.showLabels, props.showMasks, props.showKeypoints, props.showTrails, props.showHeatmap, props.drawEvents])
 
   useEffect(() => {
     eventsRef.current = eventsConfig
@@ -116,6 +120,7 @@ export function VideoCanvasOverlay(props: {
           drawCountingZones(ctx, evCfg.zones, fc, srcW, srcH)
           drawCountingLines(ctx, evCfg.lines, fc, srcW, srcH)
         }
+        if (flags.showHeatmap) drawHeatmap(ctx, trailsRef.current, fc)
         if (flags.showTrails) drawTrails(ctx, trailsRef.current, fc)
         if (pred && flags.showBBox) drawBoxes(ctx, pred.bboxes, fc, flags.showLabels)
         if (pred && flags.showKeypoints && pred.keypoints && pred.keypoints.length > 0) {
@@ -153,6 +158,7 @@ export function VideoCanvasOverlay(props: {
     props.showMasks,
     props.showKeypoints,
     props.showTrails,
+    props.showHeatmap,
     props.drawEvents,
     eventsConfig,
   ])

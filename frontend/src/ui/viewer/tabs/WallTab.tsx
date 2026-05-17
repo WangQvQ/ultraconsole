@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { wsStreamUrl } from '../../../api/client'
+import { useT } from '../../../i18n'
 import {
   useConsoleStore,
   type PredResponse,
@@ -29,6 +30,7 @@ function b64ToBlobUrl(b64: string) {
 }
 
 export function WallTab() {
+  const t = useT()
   const params = useConsoleStore((s) => s.params)
   const osd = useConsoleStore((s) => s.osd)
   const setOSD = useConsoleStore((s) => s.setOSD)
@@ -195,7 +197,7 @@ export function WallTab() {
     <div className={styles.wrap}>
       <div className={styles.toolbar}>
         <label className={styles.toggle}>
-          网格
+          {t('wall.grid')}
           <select
             className={styles.select}
             value={size}
@@ -219,9 +221,9 @@ export function WallTab() {
             onChange={(e) => setFps(Math.max(1, Math.min(30, Number(e.target.value) || 8)))}
           />
         </label>
-        <NeoButton onClick={startAll}>全部开始</NeoButton>
+        <NeoButton onClick={startAll}>{t('wall.startAll')}</NeoButton>
         <NeoButton tone="danger" onClick={stopAll}>
-          全部停止
+          {t('wall.stopAll')}
         </NeoButton>
         <div className={styles.spacer} />
         <label className={styles.toggle}>
@@ -252,6 +254,7 @@ export function WallTab() {
             classFilter={params.classFilter}
             showBBox={osd.bbox}
             showLabels={osd.labels}
+            showHeatmap={osd.heatmap}
             onUrlChange={(url) => setCells((prev) => prev.map((x) => (x.id === c.id ? { ...x, url } : x)))}
             onStart={() => startCell(c.id, c.url)}
             onStop={() => stopCell(c.id)}
@@ -268,10 +271,12 @@ function WallCell(props: {
   classFilter: string[]
   showBBox: boolean
   showLabels: boolean
+  showHeatmap: boolean
   onUrlChange: (url: string) => void
   onStart: () => void
   onStop: () => void
 }) {
+  const t = useT()
   const imgRef = useRef<HTMLImageElement | null>(null)
 
   const filtered = useMemo(() => {
@@ -299,11 +304,11 @@ function WallCell(props: {
         />
         {!props.cell.running ? (
           <NeoButton onClick={props.onStart} style={{ padding: '6px 10px', fontSize: 11 }}>
-            开始
+            {t('wall.start')}
           </NeoButton>
         ) : (
           <NeoButton tone="danger" onClick={props.onStop} style={{ padding: '6px 10px', fontSize: 11 }}>
-            停止
+            {t('wall.stop')}
           </NeoButton>
         )}
       </div>
@@ -316,6 +321,7 @@ function WallCell(props: {
               pred={filtered}
               showBBox={props.showBBox}
               showLabels={props.showLabels}
+              showHeatmap={props.showHeatmap}
               drawEvents={false}
             />
             {filtered && (
@@ -326,7 +332,7 @@ function WallCell(props: {
             )}
           </>
         ) : (
-          <div className={styles.cellEmpty}>{props.cell.running ? '连接中…' : '填 RTSP 地址后点开始'}</div>
+          <div className={styles.cellEmpty}>{props.cell.running ? t('webcam.connecting') : t('wall.emptyHint')}</div>
         )}
       </div>
     </div>

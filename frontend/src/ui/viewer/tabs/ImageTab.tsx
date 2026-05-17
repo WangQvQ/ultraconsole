@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiInferImage } from '../../../api/client'
+import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { downloadBadCaseZip } from '../../../utils/badcase'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
@@ -10,6 +11,7 @@ import { TelemetryHUD } from '../widgets/TelemetryHUD.tsx'
 import styles from './ImageTab.module.css'
 
 export function ImageTab() {
+  const t = useT()
   const params = useConsoleStore((s) => s.params)
   const osd = useConsoleStore((s) => s.osd)
   const setOSD = useConsoleStore((s) => s.setOSD)
@@ -119,10 +121,10 @@ export function ImageTab() {
             accept="image/*"
             onChange={(e) => onPick(e.target.files?.[0])}
           />
-          选择图片
+          {t('image.selectImage')}
         </label>
         <NeoButton onClick={() => imgFile && void runInfer(imgFile)} disabled={!imgFile || busy}>
-          开始推理
+          {t('common.startInfer')}
         </NeoButton>
         <NeoButton
           onClick={() => {
@@ -134,7 +136,7 @@ export function ImageTab() {
           }}
           disabled={busy}
         >
-          清空
+          {t('image.clear')}
         </NeoButton>
 
         <div className={styles.divider} />
@@ -178,16 +180,16 @@ export function ImageTab() {
           onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })}
           disabled={!roi.enabled}
         >
-          {roi.mode === 'rect' ? '矩形' : '多边形'}
+          {roi.mode === 'rect' ? t('common.rectangle') : t('common.polygon')}
         </NeoButton>
         <NeoButton
           onClick={() => setRoi({ polygon: [], closed: false })}
           disabled={!roi.enabled || roi.polygon.length === 0}
         >
-          清除 ROI
+          {t('common.clearRoi')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ closed: false })} disabled={!roi.enabled || !roi.closed}>
-          继续编辑
+          {t('common.continueEdit')}
         </NeoButton>
         <label className={styles.toggle}>
           <input
@@ -196,7 +198,7 @@ export function ImageTab() {
             onChange={(e) => setRoi({ applyFilter: e.target.checked })}
             disabled={!roi.enabled}
           />
-          仅显示 ROI 内
+          {t('common.showOnlyInsideRoi')}
         </label>
 
         <label className={styles.toggle}>
@@ -206,6 +208,10 @@ export function ImageTab() {
         <label className={styles.toggle}>
           <input type="checkbox" checked={osd.labels} onChange={(e) => setOSD({ labels: e.target.checked })} />
           Labels
+        </label>
+        <label className={styles.toggle}>
+          <input type="checkbox" checked={osd.heatmap} onChange={(e) => setOSD({ heatmap: e.target.checked })} />
+          {t('common.heatmap')}
         </label>
 
         <div className={styles.spacer} />
@@ -235,16 +241,16 @@ export function ImageTab() {
         {imgUrl ? (
           <>
             <img ref={imgRef} className={styles.img} src={imgUrl} alt="" />
-            <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
+            <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
             <RoiOverlay anchorRef={imgRef} />
             <TelemetryHUD telemetry={filteredPred?.telemetry} />
           </>
         ) : (
-          <div className={styles.empty}>拖拽图片到此处，或点击「选择图片」。</div>
+          <div className={styles.empty}>{t('image.dragHint')}</div>
         )}
 
-        {dragOver && <div className={styles.dropHint}>松开以载入图片</div>}
-        {busy && <div className={styles.busy}>推理中…</div>}
+        {dragOver && <div className={styles.dropHint}>{t('image.dropHint')}</div>}
+        {busy && <div className={styles.busy}>{t('image.inferring')}</div>}
       </div>
 
       {bboxes.length > 0 && (

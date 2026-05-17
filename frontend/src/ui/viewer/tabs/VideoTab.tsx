@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiInferFrame } from '../../../api/client'
+import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
 import { NeoButton } from '../../primitives/NeoButton'
@@ -9,6 +10,7 @@ import { RoiOverlay } from '../widgets/RoiOverlay'
 import styles from './VideoTab.module.css'
 
 export function VideoTab() {
+  const t = useT()
   const params = useConsoleStore((s) => s.params)
   const osd = useConsoleStore((s) => s.osd)
   const setOSD = useConsoleStore((s) => s.setOSD)
@@ -133,7 +135,7 @@ export function VideoTab() {
       <div className={styles.toolbar}>
         <label className={styles.fileBtn}>
           <input className={styles.fileInput} type="file" accept="video/*" onChange={(e) => void onPick(e.target.files?.[0])} />
-          选择视频
+          {t('video.selectVideo')}
         </label>
 
         {!running ? (
@@ -145,7 +147,7 @@ export function VideoTab() {
               pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'video.infer.start', msg: `fps=${targetFps}`, fields: {} })
             }}
           >
-            开始推理
+            {t('common.startInfer')}
           </NeoButton>
         ) : (
           <NeoButton
@@ -156,7 +158,7 @@ export function VideoTab() {
               pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'video.infer.stop', msg: 'stopped', fields: {} })
             }}
           >
-            停止
+            {t('common.stop')}
           </NeoButton>
         )}
 
@@ -180,13 +182,13 @@ export function VideoTab() {
           ROI
         </NeoButton>
         <NeoButton onClick={() => setRoi({ mode: roi.mode === 'rect' ? 'poly' : 'rect' })} disabled={!roi.enabled}>
-          {roi.mode === 'rect' ? '矩形' : '多边形'}
+          {roi.mode === 'rect' ? t('common.rectangle') : t('common.polygon')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ polygon: [], closed: false })} disabled={!roi.enabled || roi.polygon.length === 0}>
-          清除 ROI
+          {t('common.clearRoi')}
         </NeoButton>
         <NeoButton onClick={() => setRoi({ closed: false })} disabled={!roi.enabled || !roi.closed}>
-          继续编辑
+          {t('common.continueEdit')}
         </NeoButton>
         <label className={styles.toggle}>
           <input
@@ -195,7 +197,7 @@ export function VideoTab() {
             onChange={(e) => setRoi({ applyFilter: e.target.checked })}
             disabled={!roi.enabled}
           />
-          仅显示 ROI 内
+          {t('common.showOnlyInsideRoi')}
         </label>
 
         <label className={styles.toggle}>
@@ -205,6 +207,10 @@ export function VideoTab() {
         <label className={styles.toggle}>
           <input type="checkbox" checked={osd.labels} onChange={() => setOSD({ labels: !osd.labels })} />
           Labels
+        </label>
+        <label className={styles.toggle}>
+          <input type="checkbox" checked={osd.heatmap} onChange={() => setOSD({ heatmap: !osd.heatmap })} />
+          {t('common.heatmap')}
         </label>
 
         <div className={styles.spacer} />
@@ -229,10 +235,10 @@ export function VideoTab() {
         }}
       >
         <video ref={videoRef} className={styles.video} controls playsInline />
-        <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} />
+        <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
         <RoiOverlay anchorRef={videoRef} />
         <TelemetryHUD telemetry={filteredPred?.telemetry} />
-        {dragOver && <div className={styles.dropHint}>松开以载入视频</div>}
+        {dragOver && <div className={styles.dropHint}>{t('video.dropHint')}</div>}
       </div>
     </div>
   )

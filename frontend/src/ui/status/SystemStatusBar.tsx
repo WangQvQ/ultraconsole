@@ -1,4 +1,5 @@
 import { useConsoleStore } from '../../store/useConsoleStore'
+import { useLocaleStore } from '../../i18n/store'
 import styles from './SystemStatusBar.module.css'
 
 function fmtFps(x?: number) {
@@ -11,6 +12,8 @@ export function SystemStatusBar() {
   const device = useConsoleStore((s) => s.engine.device)
   const conns = useConsoleStore((s) => s.connections)
   const fps = useConsoleStore((s) => s.telemetrySummary.fps)
+  const locale = useLocaleStore((s) => s.locale)
+  const setLocale = useLocaleStore((s) => s.setLocale)
 
   return (
     <div className={styles.bar}>
@@ -36,6 +39,14 @@ export function SystemStatusBar() {
         <span className={styles.item}>
           FPS <span className={styles.fps}>{fmtFps(fps)}</span>
         </span>
+        <span className={styles.sep} />
+        <button
+          className={styles.langBtn}
+          onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+          title={locale === 'zh' ? 'Switch to English' : '切换到中文'}
+        >
+          {locale === 'zh' ? '中/EN' : 'EN/中'}
+        </button>
       </div>
     </div>
   )

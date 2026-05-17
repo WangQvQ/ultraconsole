@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useT } from '../../i18n'
 import { useConsoleStore, type LatencyStats } from '../../store/useConsoleStore'
 import { Card } from '../primitives/Card'
 import styles from './SystemStatsCard.module.css'
@@ -60,12 +61,13 @@ function LatencyRow({ lat }: { lat: LatencyStats }) {
 }
 
 export function SystemStatsCard() {
+  const t = useT()
   const stats = useConsoleStore((s) => s.systemStats)
 
   return (
     <Card title="System Stats" right={stats ? new Date(stats.ts * 1000).toLocaleTimeString() : '--'}>
       {!stats ? (
-        <div className={styles.hint}>采集中…</div>
+        <div className={styles.hint}>{t('stats.collecting')}</div>
       ) : (
         <div className={styles.stack}>
           <div className={styles.row}>
@@ -84,7 +86,7 @@ export function SystemStatsCard() {
           {stats.gpus.length === 0 ? (
             <div className={styles.row}>
               <span className={styles.k}>GPU</span>
-              <span className={styles.v}>无 / NVML 不可用</span>
+              <span className={styles.v}>{t('stats.gpuUnavailable')}</span>
             </div>
           ) : (
             stats.gpus.map((g) => (
