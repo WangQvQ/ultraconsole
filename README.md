@@ -37,7 +37,7 @@
 
 ## 页面预览（Screenshot）
 
-![Ultralytics 工业级前端推理控制台预览](image.png)
+![Ultralytics 工业级前端推理控制台预览](preview.png)
 
 ## 项目亮点（为什么值得用）
 

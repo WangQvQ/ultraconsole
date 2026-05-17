@@ -37,7 +37,7 @@ An **industrial-grade object detection visualization console** for quality inspe
 
 ## Screenshot
 
-![Ultralytics Industrial Inference Console Preview](image.png)
+![Ultralytics Industrial Inference Console Preview](preview.png)
 
 ## Highlights
 
