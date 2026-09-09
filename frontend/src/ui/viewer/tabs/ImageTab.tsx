@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { apiInferImage } from '../../../api/client'
 import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
@@ -69,6 +69,10 @@ export function ImageTab() {
     }
   }
 
+  const rerunWithLatestState = useEffectEvent((file: File) => {
+    void runInfer(file)
+  })
+
   const filteredPred = useMemo(() => {
     if (!lastPred) return undefined
     const classFiltered =
@@ -107,7 +111,7 @@ export function ImageTab() {
     if (!imgFile) return
     if (reInferTimerRef.current) window.clearTimeout(reInferTimerRef.current)
     reInferTimerRef.current = window.setTimeout(() => {
-      void runInfer(imgFile)
+      rerunWithLatestState(imgFile)
     }, 250)
   }, [params.conf, params.iou, params.classFilter, imgFile])
 
@@ -261,5 +265,3 @@ export function ImageTab() {
     </div>
   )
 }
-
-

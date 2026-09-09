@@ -18,7 +18,11 @@ export function useEventTracker() {
   const lastFrameKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!lastPred) return
+    if (!lastPred || lastPred.source === 'video') {
+      stateRef.current = newTrackerState()
+      lastFrameKeyRef.current = null
+      return
+    }
     const key = String(lastPred.frameId ?? lastPred.ts)
     if (lastFrameKeyRef.current === key) return
     lastFrameKeyRef.current = key

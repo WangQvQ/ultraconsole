@@ -3,10 +3,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
-from typing import Deque, Optional
 
 from .schemas import GpuStat, LatencyStats, SystemStats
-
 
 # ---- psutil（可选）----
 try:
@@ -31,7 +29,7 @@ class LatencyTracker:
 
     def __init__(self, maxlen: int = 600) -> None:
         self._lock = threading.Lock()
-        self._buf: Deque[float] = deque(maxlen=maxlen)
+        self._buf: deque[float] = deque(maxlen=maxlen)
 
     def record(self, ms: float) -> None:
         with self._lock:
@@ -92,7 +90,7 @@ def _gpu_stats() -> list[GpuStat]:
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
             name_raw = pynvml.nvmlDeviceGetName(handle)
-            name = name_raw.decode("utf-8") if isinstance(name_raw, (bytes, bytearray)) else str(name_raw)
+            name = name_raw.decode("utf-8") if isinstance(name_raw, bytes | bytearray) else str(name_raw)
             try:
                 util = float(pynvml.nvmlDeviceGetUtilizationRates(handle).gpu)
             except Exception:
@@ -129,11 +127,11 @@ def _gpu_stats() -> list[GpuStat]:
 
 
 def system_stats() -> SystemStats:
-    cpu_pct: Optional[float] = None
-    cpu_count: Optional[int] = None
-    mem_used: Optional[float] = None
-    mem_total: Optional[float] = None
-    mem_pct: Optional[float] = None
+    cpu_pct: float | None = None
+    cpu_count: int | None = None
+    mem_used: float | None = None
+    mem_total: float | None = None
+    mem_pct: float | None = None
     if _HAS_PSUTIL:
         try:
             cpu_pct = float(psutil.cpu_percent(interval=None))

@@ -5,11 +5,12 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from .security import validate_webhook_url
 
 WebhookFormat = Literal["generic", "dingtalk", "wecom", "feishu", "slack"]
 NotifyKind = Literal["alert", "line.cross", "zone.enter", "zone.leave", "test"]
@@ -22,11 +23,19 @@ class WebhookConfig(BaseModel):
     url: str = ""
     format: WebhookFormat = "generic"
     minLevel: LevelType = "WARN"
-    cooldownSec: float = 30.0  # 同 (kind, ref) 在窗口内不重发
+    cooldownSec: float = Field(default=30.0, ge=0.0, le=86_400.0)  # 同 (kind, ref) 在窗口内不重发
     includeKinds: list[NotifyKind] = Field(
         default_factory=lambda: ["alert", "line.cross", "zone.enter"]
     )
-    timeoutSec: float = 5.0
+    timeoutSec: float = Field(default=5.0, ge=0.5, le=30.0)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        value = value.strip()
+        if value:
+            validate_webhook_url(value)
+        return value
 
 
 class NotifyRequest(BaseModel):
@@ -34,15 +43,15 @@ class NotifyRequest(BaseModel):
     level: LevelType = "WARN"
     title: str
     msg: str
-    ref: Optional[str] = None  # line/zone id 或 alert key；用于 cooldown 去重
+    ref: str | None = None  # line/zone id 或 alert key；用于 cooldown 去重
     fields: dict[str, Any] = Field(default_factory=dict)
 
 
 class NotifyResult(BaseModel):
     ok: bool
     skipped: bool = False
-    reason: Optional[str] = None
-    httpStatus: Optional[int] = None
+    reason: str | None = None
+    httpStatus: int | None = None
 
 
 _CONFIG_PATH = Path(os.environ.get("ULTRA_WEBHOOK_FILE", str(Path(__file__).resolve().parent.parent / ".webhook.json")))
@@ -81,7 +90,7 @@ class WebhookManager:
             return self._cfg.model_copy()
 
     # ---- 派发 ----
-    def _should_skip(self, cfg: WebhookConfig, req: NotifyRequest) -> Optional[str]:
+    def _should_skip(self, cfg: WebhookConfig, req: NotifyRequest) -> str | None:
         if not cfg.enabled:
             return "disabled"
         if not cfg.url:
@@ -113,7 +122,8 @@ class WebhookManager:
 
         payload = _format_payload(cfg.format, req)
         try:
-            with httpx.Client(timeout=cfg.timeoutSec, follow_redirects=True) as client:
+            # 不跟随重定向，避免公开 URL 通过 30x 绕过私网 SSRF 防护。
+            with httpx.Client(timeout=cfg.timeoutSec, follow_redirects=False) as client:
                 resp = client.post(cfg.url, json=payload, headers={"Content-Type": "application/json"})
             ok = 200 <= resp.status_code < 300
             if ok:

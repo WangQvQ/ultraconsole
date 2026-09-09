@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
 
 DeviceType = Literal["cpu", "cuda"]
 TaskType = Literal["detect", "segment", "pose"]
@@ -44,11 +43,11 @@ class LogEntry(BaseModel):
 
 
 class Telemetry(BaseModel):
-    fps: Optional[float] = None
-    preprocessMs: Optional[float] = None
-    inferenceMs: Optional[float] = None
-    postprocessMs: Optional[float] = None
-    vramUtil: Optional[float] = None
+    fps: float | None = None
+    preprocessMs: float | None = None
+    inferenceMs: float | None = None
+    postprocessMs: float | None = None
+    vramUtil: float | None = None
 
 
 class PredBBox(BaseModel):
@@ -58,31 +57,31 @@ class PredBBox(BaseModel):
     y1: float
     x2: float
     y2: float
-    label: Optional[str] = None
-    trackId: Optional[int] = None
+    label: str | None = None
+    trackId: int | None = None
 
 
 class PredMask(BaseModel):
     """实例分割：单个 mask 用归一化前的源图坐标多边形表达。"""
     cls: str
-    trackId: Optional[int] = None
+    trackId: int | None = None
     points: list[list[float]] = Field(default_factory=list)  # [[x,y], ...]
 
 
 class PredKeypoint(BaseModel):
     x: float
     y: float
-    conf: Optional[float] = None
+    conf: float | None = None
 
 
 class PredInstanceKeypoints(BaseModel):
     cls: str
-    trackId: Optional[int] = None
+    trackId: int | None = None
     points: list[PredKeypoint] = Field(default_factory=list)
 
 
 class PredResponse(BaseModel):
-    frameId: Optional[str] = None
+    frameId: str | None = None
     ts: float
     width: int
     height: int
@@ -95,30 +94,30 @@ class PredResponse(BaseModel):
 
 class LatencyStats(BaseModel):
     count: int
-    p50Ms: Optional[float] = None
-    p95Ms: Optional[float] = None
-    p99Ms: Optional[float] = None
-    avgMs: Optional[float] = None
+    p50Ms: float | None = None
+    p95Ms: float | None = None
+    p99Ms: float | None = None
+    avgMs: float | None = None
     recentMs: list[float] = Field(default_factory=list)  # 最近 N 帧推理耗时（绘 sparkline 用）
 
 
 class GpuStat(BaseModel):
     index: int
     name: str
-    utilPct: Optional[float] = None
-    memUsedMb: Optional[float] = None
-    memTotalMb: Optional[float] = None
-    tempC: Optional[float] = None
-    powerW: Optional[float] = None
+    utilPct: float | None = None
+    memUsedMb: float | None = None
+    memTotalMb: float | None = None
+    tempC: float | None = None
+    powerW: float | None = None
 
 
 class SystemStats(BaseModel):
     ts: float
-    cpuPct: Optional[float] = None
-    cpuCount: Optional[int] = None
-    memUsedMb: Optional[float] = None
-    memTotalMb: Optional[float] = None
-    memPct: Optional[float] = None
+    cpuPct: float | None = None
+    cpuCount: int | None = None
+    memUsedMb: float | None = None
+    memTotalMb: float | None = None
+    memPct: float | None = None
     gpus: list[GpuStat] = Field(default_factory=list)
     inferLatency: LatencyStats = Field(default_factory=lambda: LatencyStats(count=0))
 

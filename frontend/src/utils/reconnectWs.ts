@@ -21,6 +21,7 @@ export type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error' | 'rec
 
 export type ReconnectingWsOpts = {
   url: string
+  protocols?: string | string[]
   onOpen?: () => void
   onMessage?: (data: unknown, raw: MessageEvent) => void
   onState?: (state: WsState, info?: { attempt?: number; reason?: string }) => void
@@ -117,7 +118,8 @@ export function createReconnectingWs(opts: ReconnectingWsOpts): ReconnectingWs {
     setState('connecting', { attempt })
     let sock: WebSocket
     try {
-      sock = new WebSocket(url)
+      sock = new WebSocket(url, opts.protocols)
+      sock.binaryType = 'arraybuffer'
     } catch (e) {
       setState('error', { reason: String(e) })
       scheduleReconnect()

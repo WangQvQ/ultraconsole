@@ -3,19 +3,25 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
+import math
 import os
+import struct
 import threading
 import time
+import uuid
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Annotated, Any
+from urllib.parse import urlsplit, urlunsplit
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from PIL import Image
 
+from .config import settings
 from .infer_runtime import UltralyticsRuntime
 from .schemas import (
     ModelInfo,
@@ -26,10 +32,11 @@ from .schemas import (
     SystemStats,
     UpdateParamsRequest,
 )
+from .security import require_http_auth, require_ws_auth, validate_rtsp_url
 from .state import AppState
 from .system_stats import system_stats
-from .webhook import NotifyRequest, NotifyResult, WebhookConfig, manager as webhook_manager
-
+from .webhook import NotifyRequest, NotifyResult, WebhookConfig
+from .webhook import manager as webhook_manager
 
 _DEFAULT_MODELS_DIR = str(Path(__file__).resolve().parent.parent / "models")
 MODELS_DIR = os.environ.get("ULTRA_MODELS_DIR", _DEFAULT_MODELS_DIR)
@@ -51,19 +58,48 @@ def _validated_model_id(model_id: str) -> str:
 
 app = FastAPI(title="Ultralytics Infer Console API", version="0.1.0")
 state = AppState()
-runtime = UltralyticsRuntime(models_dir=MODELS_DIR)
+runtime = UltralyticsRuntime(models_dir=MODELS_DIR, max_tracker_contexts=settings.max_tracker_contexts)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=bool(settings.api_token),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+@app.middleware("http")
+async def api_auth_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path != "/api/health" and request.method != "OPTIONS":
+        try:
+            require_http_auth(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return await call_next(request)
+
+
 def _device_str(device: str) -> str:
     return "cuda" if device == "cuda" else "cpu"
+
+
+def _redacted_stream_url(url: str) -> str:
+    """日志中保留协议/主机/端口，移除 RTSP 用户名、密码、路径和查询参数。"""
+    parsed = urlsplit(url)
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return urlunsplit((parsed.scheme, host, "", "", ""))
+
+
+def _pack_stream_frame(*, stream_id: str, frame_id: str, ts: float, width: int, height: int, jpeg: bytes) -> bytes:
+    header = json.dumps(
+        {"type": "frame", "streamId": stream_id, "frameId": frame_id, "ts": ts, "width": width, "height": height},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return struct.pack("!I", len(header)) + header + jpeg
 
 
 @app.get("/api/health")
@@ -102,14 +138,14 @@ async def select_model(req: SelectModelRequest) -> ModelInfo:
         model_id = _validated_model_id(req.modelId)
     except ValueError as e:
         state.logs.append(level="ERROR", event="model.invalid", msg=str(e), fields={"modelId": req.modelId})
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     device = _device_str(state.engine.device)
     try:
         loaded = await asyncio.to_thread(runtime.load, model_id, device)
     except Exception as e:
         state.logs.append(level="ERROR", event="model.load_failed", msg=str(e), fields={"modelId": model_id})
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     with state.lock:
         state.model_id = loaded.id
@@ -211,9 +247,32 @@ async def api_notify(req: NotifyRequest) -> NotifyResult:
 
 
 def _decode_image(raw: bytes) -> Image.Image:
+    if len(raw) > settings.max_upload_bytes:
+        raise ValueError(f"Image exceeds {settings.max_upload_bytes} bytes")
+    Image.MAX_IMAGE_PIXELS = settings.max_image_pixels
     img = Image.open(io.BytesIO(raw))
+    if img.width <= 0 or img.height <= 0 or img.width * img.height > settings.max_image_pixels:
+        raise ValueError(f"Image exceeds {settings.max_image_pixels} pixels")
     img.load()
     return img
+
+
+async def _read_upload_limited(file: UploadFile) -> bytes:
+    content_length = file.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > settings.max_upload_bytes:
+                raise HTTPException(status_code=413, detail="Image upload is too large")
+        except ValueError:
+            pass
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(1024 * 1024):
+        total += len(chunk)
+        if total > settings.max_upload_bytes:
+            raise HTTPException(status_code=413, detail="Image upload is too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _run_infer(
@@ -222,7 +281,7 @@ def _run_infer(
     iou: float,
     class_filter: list[str],
     track: bool = False,
-    tracker_key: Optional[str] = None,
+    tracker_key: str | None = None,
 ) -> PredResponse:
     return runtime.infer_image(
         image=image,
@@ -236,7 +295,7 @@ def _run_infer(
 
 
 @app.post("/api/infer/image", response_model=PredResponse)
-async def infer_image(file: UploadFile = File(...)) -> PredResponse:
+async def infer_image(file: Annotated[UploadFile, File()]) -> PredResponse:
     cur = runtime.current()
     if cur is None:
         raise HTTPException(status_code=400, detail="No model loaded. Put weights into backend/models and select a model.")
@@ -244,11 +303,11 @@ async def infer_image(file: UploadFile = File(...)) -> PredResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail=f"Unsupported content-type: {file.content_type}")
 
-    raw = await file.read()
+    raw = await _read_upload_limited(file)
     try:
         img = await asyncio.to_thread(_decode_image, raw)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid image: {e}") from e
 
     p = state.params
     t0 = time.time()
@@ -258,11 +317,11 @@ async def infer_image(file: UploadFile = File(...)) -> PredResponse:
         return pred
     except Exception as e:
         state.logs.append(level="ERROR", event="infer.image_failed", msg=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/api/infer/frame", response_model=PredResponse)
-async def infer_frame(file: UploadFile = File(...)) -> PredResponse:
+async def infer_frame(file: Annotated[UploadFile, File()]) -> PredResponse:
     """Video 抽帧推理专用：允许 image/jpeg（以及其它 image/*），返回 PredResponse。"""
     return await infer_image(file=file)
 
@@ -275,64 +334,92 @@ def export_logs_csv() -> PlainTextResponse:
 
 @app.websocket("/ws/infer")
 async def ws_infer(ws: WebSocket):
-    await ws.accept()
+    authorized, subprotocol = await require_ws_auth(ws)
+    if not authorized:
+        return
+    await ws.accept(subprotocol=subprotocol)
     state.logs.append(level="INFO", event="ws.connect", msg="Client connected")
-
-    latest_frame: Optional[Dict[str, Any]] = None
-    processing = False
-    last_pred_perf: Optional[float] = None
+    tracker_key = f"ws-infer:{uuid.uuid4().hex}"
+    latest_frame: dict[str, Any] | None = None
+    frame_ready = asyncio.Event()
+    outbound: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=8)
+    last_pred_perf: float | None = None
     no_model_logged = False
 
-    async def send_log(level: str, event: str, msg: str, fields: Optional[Dict[str, Any]] = None):
-        entry = state.logs.append(level=level, event=event, msg=msg, fields=fields or {})
-        await ws.send_json({"type": "log", **entry.model_dump()})
+    def enqueue(payload: dict[str, Any]) -> None:
+        if outbound.full():
+            try:
+                outbound.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        outbound.put_nowait(payload)
 
-    try:
+    def send_log(level: str, event: str, msg: str, fields: dict[str, Any] | None = None) -> None:
+        entry = state.logs.append(level=level, event=event, msg=msg, fields=fields or {})
+        enqueue({"type": "log", **entry.model_dump()})
+
+    async def reader() -> None:
+        nonlocal latest_frame
         while True:
             msg = await ws.receive_json()
             mtype = msg.get("type")
             if mtype == "ping":
-                await ws.send_json({"type": "pong", "ts": time.time()})
+                enqueue({"type": "pong", "ts": time.time()})
                 continue
             if mtype == "params":
                 continue
-
             if mtype != "frame":
                 continue
-
-            latest_frame = msg
-            if processing:
+            b64 = msg.get("imageJpegBase64")
+            if not isinstance(b64, str) or not b64:
+                send_log("WARN", "infer.invalid_frame", "Missing JPEG payload")
                 continue
+            if len(b64) > settings.max_ws_base64_chars:
+                send_log("WARN", "infer.frame_too_large", "WebSocket frame rejected")
+                continue
+            # Queue size 1：新帧直接覆盖尚未处理的旧帧。
+            latest_frame = msg
+            frame_ready.set()
 
-            processing = True
+    async def infer_worker() -> None:
+        nonlocal latest_frame, last_pred_perf, no_model_logged
+        while True:
+            await frame_ready.wait()
             while latest_frame is not None:
                 frame = latest_frame
                 latest_frame = None
+                frame_ready.clear()
 
                 cur = runtime.current()
                 if cur is None:
                     if not no_model_logged:
-                        await send_log("ERROR", "infer.no_model", "No model loaded")
+                        send_log("ERROR", "infer.no_model", "No model loaded")
                         no_model_logged = True
                     continue
                 no_model_logged = False
 
                 frame_id = str(frame.get("frameId", ""))
                 ts = float(frame.get("ts", time.time()))
-                b64 = frame.get("imageJpegBase64")
-                if not b64:
-                    continue
+                b64 = str(frame["imageJpegBase64"])
 
                 try:
-                    raw = base64.b64decode(b64)
+                    raw = base64.b64decode(b64, validate=True)
                     img = await asyncio.to_thread(_decode_image, raw)
                     p = state.params
-                    conf = float(frame.get("conf", p.conf))
-                    iou = float(frame.get("iou", p.iou))
-                    class_filter = list(frame.get("classFilter", p.classFilter))
-                    track = bool(frame.get("track", p.track))
+                    frame_params = Params(
+                        conf=frame.get("conf", p.conf),
+                        iou=frame.get("iou", p.iou),
+                        classFilter=frame.get("classFilter", p.classFilter),
+                        track=frame.get("track", p.track),
+                    )
                     pred = await asyncio.to_thread(
-                        _run_infer, img, conf, iou, class_filter, track, "ws-infer"
+                        _run_infer,
+                        img,
+                        frame_params.conf,
+                        frame_params.iou,
+                        list(frame_params.classFilter),
+                        frame_params.track,
+                        tracker_key,
                     )
                     now_perf = time.perf_counter()
                     if last_pred_perf is not None:
@@ -341,15 +428,30 @@ async def ws_infer(ws: WebSocket):
                     last_pred_perf = now_perf
                     pred.frameId = frame_id
                     pred.ts = ts
-                    await ws.send_json({"type": "pred", **pred.model_dump()})
+                    enqueue({"type": "pred", **pred.model_dump()})
                 except Exception as e:
-                    await send_log("ERROR", "infer.ws_failed", str(e), {"frameId": frame_id})
+                    send_log("ERROR", "infer.ws_failed", str(e), {"frameId": frame_id})
 
-            processing = False
+    async def sender() -> None:
+        while True:
+            await ws.send_json(await outbound.get())
+
+    tasks = [asyncio.create_task(reader()), asyncio.create_task(infer_worker()), asyncio.create_task(sender())]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            exc = task.exception()
+            if exc and not isinstance(exc, WebSocketDisconnect):
+                raise exc
     except WebSocketDisconnect:
         state.logs.append(level="INFO", event="ws.disconnect", msg="Client disconnected")
     except Exception as e:
         state.logs.append(level="ERROR", event="ws.crash", msg=str(e))
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        runtime.release_tracker(tracker_key)
 
 
 @app.websocket("/ws/stream")
@@ -361,18 +463,44 @@ async def ws_stream(ws: WebSocket):
     - {type: 'rtsp.stop', streamId} 单路停止；{type: 'rtsp.stopAll'} 全停。
     - 不带 streamId 的旧客户端按 '__default__' 兼容。
     """
-    await ws.accept()
+    authorized, subprotocol = await require_ws_auth(ws)
+    if not authorized:
+        return
+    await ws.accept(subprotocol=subprotocol)
     loop = asyncio.get_running_loop()
 
-    streams: Dict[str, Dict[str, Any]] = {}  # streamId -> {"thread": Thread, "stop": Event}
+    streams: dict[str, dict[str, Any]] = {}  # streamId -> {"thread": Thread, "stop": Event}
     streams_lock = threading.Lock()
+    outbound: asyncio.Queue[dict[str, Any] | bytes] = asyncio.Queue(maxsize=settings.max_rtsp_streams * 2 + 16)
 
-    async def send_log(level: str, event: str, msg: str, stream_id: Optional[str] = None, fields: Optional[Dict[str, Any]] = None):
+    def enqueue(payload: dict[str, Any] | bytes) -> None:
+        if outbound.full():
+            try:
+                outbound.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        outbound.put_nowait(payload)
+
+    def submit(payload: dict[str, Any] | bytes) -> None:
+        try:
+            loop.call_soon_threadsafe(enqueue, payload)
+        except RuntimeError:
+            pass
+
+    def send_log(level: str, event: str, msg: str, stream_id: str | None = None, fields: dict[str, Any] | None = None) -> None:
         entry = state.logs.append(level=level, event=event, msg=msg, fields=fields or {})
         payload = {"type": "log", **entry.model_dump()}
         if stream_id is not None:
             payload["streamId"] = stream_id
-        await ws.send_json(payload)
+        submit(payload)
+
+    async def sender() -> None:
+        while True:
+            payload = await outbound.get()
+            if isinstance(payload, bytes):
+                await ws.send_bytes(payload)
+            else:
+                await ws.send_json(payload)
 
     def stop_stream(stream_id: str, *, join_timeout: float = 2.0) -> None:
         with streams_lock:
@@ -384,6 +512,7 @@ async def ws_stream(ws: WebSocket):
         ev.set()
         if th.is_alive():
             th.join(timeout=join_timeout)
+        runtime.release_tracker(f"rtsp:{stream_id}")
 
     def stop_all_streams() -> None:
         with streams_lock:
@@ -400,36 +529,33 @@ async def ws_stream(ws: WebSocket):
         class_filter: list[str],
         track: bool,
     ):
-        # 同 streamId 已存在则先停
-        stop_stream(stream_id)
-
         stop_ev = threading.Event()
 
         def run():
-            def safe_submit(coro):
-                try:
-                    fut = asyncio.run_coroutine_threadsafe(coro, loop)
-                    fut.add_done_callback(lambda f: f.exception())
-                except Exception:
-                    stop_ev.set()
-
-            cap = cv2.VideoCapture(url)
+            safe_url = _redacted_stream_url(url)
+            cap = cv2.VideoCapture()
+            if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5_000)
+            if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
+                cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5_000)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.open(url)
             if not cap.isOpened():
-                safe_submit(send_log("ERROR", "rtsp.open_failed", "Failed to open RTSP", stream_id, {"url": url}))
+                send_log("ERROR", "rtsp.open_failed", "Failed to open RTSP", stream_id, {"url": safe_url})
                 return
 
-            safe_submit(send_log("INFO", "rtsp.opened", "RTSP opened", stream_id, {"url": url}))
+            send_log("INFO", "rtsp.opened", "RTSP opened", stream_id, {"url": safe_url})
 
             min_interval = 1.0 / max(1.0, float(fps))
             last_sent = 0.0
             frame_seq = 0
-            last_pred_perf: Optional[float] = None
+            last_pred_perf: float | None = None
 
             try:
                 while not stop_ev.is_set():
                     ok, frame = cap.read()
                     if not ok or frame is None:
-                        safe_submit(send_log("ERROR", "rtsp.read_failed", "RTSP read failed", stream_id, {"url": url}))
+                        send_log("ERROR", "rtsp.read_failed", "RTSP read failed", stream_id, {"url": safe_url})
                         break
 
                     now = time.time()
@@ -442,27 +568,23 @@ async def ws_stream(ws: WebSocket):
                     if not ok2:
                         continue
                     jpeg_bytes = buf.tobytes()
-                    jpeg_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
                     frame_id = str(frame_seq)
                     frame_seq += 1
 
-                    safe_submit(
-                        ws.send_json(
-                            {
-                                "type": "frame",
-                                "streamId": stream_id,
-                                "frameId": frame_id,
-                                "ts": now,
-                                "imageJpegBase64": jpeg_b64,
-                                "width": int(w),
-                                "height": int(h),
-                            }
-                        ),
+                    submit(
+                        _pack_stream_frame(
+                            stream_id=stream_id,
+                            frame_id=frame_id,
+                            ts=now,
+                            width=int(w),
+                            height=int(h),
+                            jpeg=jpeg_bytes,
+                        )
                     )
 
                     cur = runtime.current()
                     if cur is None:
-                        safe_submit(send_log("ERROR", "infer.no_model", "No model loaded; stopping RTSP", stream_id))
+                        send_log("ERROR", "infer.no_model", "No model loaded; stopping RTSP", stream_id)
                         break
 
                     try:
@@ -485,12 +607,13 @@ async def ws_stream(ws: WebSocket):
                         pred.frameId = frame_id
                         pred.ts = now
                         payload = {"type": "pred", "streamId": stream_id, **pred.model_dump()}
-                        safe_submit(ws.send_json(payload))
+                        submit(payload)
                     except Exception as e:
-                        safe_submit(send_log("ERROR", "infer.rtsp_failed", str(e), stream_id, {"frameId": frame_id}))
+                        send_log("ERROR", "infer.rtsp_failed", str(e), stream_id, {"frameId": frame_id})
             finally:
                 cap.release()
-                safe_submit(send_log("INFO", "rtsp.stopped", "RTSP stopped", stream_id))
+                runtime.release_tracker(f"rtsp:{stream_id}")
+                send_log("INFO", "rtsp.stopped", "RTSP stopped", stream_id)
                 with streams_lock:
                     cur_entry = streams.get(stream_id)
                     if cur_entry is not None and cur_entry.get("stop") is stop_ev:
@@ -501,46 +624,69 @@ async def ws_stream(ws: WebSocket):
             streams[stream_id] = {"thread": thread, "stop": stop_ev}
         thread.start()
 
+    sender_task = asyncio.create_task(sender())
     try:
         while True:
             msg = await ws.receive_json()
             mtype = msg.get("type")
             if mtype == "ping":
-                await ws.send_json({"type": "pong", "ts": time.time()})
+                enqueue({"type": "pong", "ts": time.time()})
                 continue
             if mtype == "rtsp.start":
                 url = str(msg.get("url", "")).strip()
                 stream_id = str(msg.get("streamId") or "__default__")
-                if not url:
-                    await send_log("ERROR", "rtsp.invalid", "Empty url", stream_id)
+                if len(stream_id) > 64 or not stream_id.replace("_", "").replace("-", "").isalnum():
+                    send_log("ERROR", "rtsp.invalid", "Invalid streamId")
                     continue
-
-                p = state.params
-                fps = float(msg.get("fps", 10))
-                conf = float(msg.get("conf", p.conf))
-                iou = float(msg.get("iou", p.iou))
-                class_filter = list(msg.get("classFilter", p.classFilter))
-                track = bool(msg.get("track", p.track))
+                try:
+                    validate_rtsp_url(url)
+                    p = state.params
+                    fps = float(msg.get("fps", 10))
+                    if not math.isfinite(fps) or fps < 1 or fps > settings.max_rtsp_fps:
+                        raise ValueError(f"fps must be between 1 and {settings.max_rtsp_fps}")
+                    stream_params = Params(
+                        conf=msg.get("conf", p.conf),
+                        iou=msg.get("iou", p.iou),
+                        classFilter=msg.get("classFilter", p.classFilter),
+                        track=msg.get("track", p.track),
+                    )
+                except Exception as exc:
+                    send_log("ERROR", "rtsp.invalid", str(exc), stream_id)
+                    continue
+                with streams_lock:
+                    is_new = stream_id not in streams
+                    at_capacity = is_new and len(streams) >= settings.max_rtsp_streams
+                if at_capacity:
+                    send_log("ERROR", "rtsp.limit", f"Maximum {settings.max_rtsp_streams} streams", stream_id)
+                    continue
+                await asyncio.to_thread(stop_stream, stream_id)
                 start_rtsp_worker(
-                    stream_id=stream_id, url=url, fps=fps, conf=conf, iou=iou,
-                    class_filter=class_filter, track=track,
+                    stream_id=stream_id,
+                    url=url,
+                    fps=fps,
+                    conf=stream_params.conf,
+                    iou=stream_params.iou,
+                    class_filter=list(stream_params.classFilter), track=stream_params.track,
                 )
                 continue
 
             if mtype == "rtsp.stop":
                 stream_id = str(msg.get("streamId") or "__default__")
-                stop_stream(stream_id)
-                await send_log("INFO", "rtsp.stop", "Stopped by client", stream_id)
+                await asyncio.to_thread(stop_stream, stream_id)
+                send_log("INFO", "rtsp.stop", "Stopped by client", stream_id)
                 continue
 
             if mtype == "rtsp.stopAll":
-                stop_all_streams()
-                await send_log("INFO", "rtsp.stopAll", "All streams stopped")
+                await asyncio.to_thread(stop_all_streams)
+                send_log("INFO", "rtsp.stopAll", "All streams stopped")
                 continue
 
     except WebSocketDisconnect:
-        stop_all_streams()
+        await asyncio.to_thread(stop_all_streams)
         state.logs.append(level="INFO", event="ws.stream.disconnect", msg="Client disconnected")
     except Exception as e:
-        stop_all_streams()
+        await asyncio.to_thread(stop_all_streams)
         state.logs.append(level="ERROR", event="ws.stream.crash", msg=str(e))
+    finally:
+        sender_task.cancel()
+        await asyncio.gather(sender_task, return_exceptions=True)

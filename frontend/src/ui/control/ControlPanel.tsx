@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiListModels, apiSelectEngine, apiSelectModel, apiUpdateParams } from '../../api/client'
 import { useT } from '../../i18n'
 import { useConsoleStore } from '../../store/useConsoleStore'
+import type { Params } from '../../api/contracts'
 import { Card } from '../primitives/Card'
 import { NeoButton } from '../primitives/NeoButton'
 import styles from './ControlPanel.module.css'
@@ -52,8 +53,8 @@ export function ControlPanel() {
 
   // 滑动条/标签变更要防抖到后端，避免几十次/秒的 /api/params 请求
   const flushTimerRef = useRef<number | null>(null)
-  const pendingParamsRef = useRef<{ conf: number; iou: number; classFilter: string[] } | null>(null)
-  function flushParams(next: { conf: number; iou: number; classFilter: string[] }) {
+  const pendingParamsRef = useRef<Params | null>(null)
+  function flushParams(next: Params) {
     pendingParamsRef.current = next
     if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current)
     flushTimerRef.current = window.setTimeout(async () => {
@@ -199,4 +200,3 @@ export function ControlPanel() {
     </div>
   )
 }
-

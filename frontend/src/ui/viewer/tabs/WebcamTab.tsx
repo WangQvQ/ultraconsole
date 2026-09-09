@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { wsInferUrl, type WsLogMessage, type WsPredMessage } from '../../../api/client'
+import { wsAuthProtocols, wsInferUrl, type WsLogMessage, type WsPredMessage } from '../../../api/client'
 import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { downloadBadCaseZip } from '../../../utils/badcase'
@@ -71,12 +71,12 @@ export function WebcamTab() {
   }, [targetFps])
 
   useEffect(() => {
+    const video = videoRef.current
     return () => {
       inferRunningRef.current = false
       const ws = wsRef.current
       wsRef.current = null
       ws?.close()
-      const video = videoRef.current
       const stream = (video?.srcObject ?? null) as MediaStream | null
       if (stream) for (const t of stream.getTracks()) t.stop()
       if (video) video.srcObject = null
@@ -125,6 +125,7 @@ export function WebcamTab() {
 
     const ws = createReconnectingWs({
       url: wsInferUrl(),
+      protocols: wsAuthProtocols(),
       onState: handleState,
       onMessage: (data) => {
         const msg = data as WsPredMessage | WsLogMessage
@@ -384,6 +385,7 @@ export function WebcamTab() {
         <VideoCanvasOverlay videoRef={videoRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
         <RoiOverlay anchorRef={videoRef} />
         <EventEditOverlay
+          key={`${editTool}-${editTool !== 'none'}`}
           anchorRef={videoRef}
           enabled={editTool !== 'none'}
           mode={editTool === 'line' ? 'line' : 'zone'}
@@ -393,5 +395,3 @@ export function WebcamTab() {
     </div>
   )
 }
-
-

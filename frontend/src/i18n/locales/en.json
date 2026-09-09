@@ -16,7 +16,7 @@
     "selectModelHint": "Select model (backend/models)",
     "warming": "Warming up…",
     "classHint": "Class labels appear after selecting a model.",
-    "enableTracking": "Enable ByteTrack (Webcam / RTSP)",
+    "enableTracking": "Enable ByteTrack (Webcam / RTSP / Wall; automatic for Video)",
     "trackingHint": "Enables trackId on bboxes, trails & counting lines/zones.",
     "drawLineHint": "Draw lines/zones via right-click menu or the buttons next to ROI tool."
   },
@@ -29,7 +29,23 @@
   },
   "video": {
     "selectVideo": "Select Video",
-    "dropHint": "Release to load video"
+    "dropHint": "Release to load video",
+    "analyze": "Analyze from start (with tracking)",
+    "exportReport": "Export analysis CSV",
+    "finishEdit": "Finish drawing",
+    "drawLine": "Draw counting line",
+    "drawZone": "Draw counting zone",
+    "clearRules": "Clear lines/zones",
+    "analysisHint": "Samples are processed sequentially at the selected FPS; speed depends on inference performance. Each run resets counts and starts at the beginning. Low sampling rates can still miss events. Changing the model, parameters or rules stops the run. Video events do not send live alerts.",
+    "lineHint": "Click two points to create a line, then finish drawing.",
+    "zoneHint": "Click polygon vertices, then click the first point to close (at least three vertices).",
+    "running": "Analyzing",
+    "completed": "Completed",
+    "stopped": "Stopped (partial results)",
+    "error": "Failed (partial results)",
+    "frames": "frames",
+    "events": "events",
+    "decodeError": "Cannot decode this video. Use a browser-supported video format."
   },
   "webcam": {
     "startPreview": "Preview",

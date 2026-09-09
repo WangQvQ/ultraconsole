@@ -4,7 +4,6 @@ import os
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -28,6 +27,7 @@ class LoadedModel:
     filename: str
     task_type: TaskType
     names: dict[str, str]
+    path: str
     yolo: YOLO
 
 
@@ -47,12 +47,14 @@ def _to_numpy(t):
 
 
 class UltralyticsRuntime:
-    def __init__(self, models_dir: str) -> None:
+    def __init__(self, models_dir: str, *, max_tracker_contexts: int = 10) -> None:
         self._models_dir = models_dir
-        self._loaded: Optional[LoadedModel] = None
+        self._loaded: LoadedModel | None = None
         self._lock = threading.RLock()
         # YOLO.predict 不保证线程安全：用 predict_lock 串行化推理
         self._predict_lock = threading.Lock()
+        self._tracking_models: dict[str, YOLO] = {}
+        self._max_tracker_contexts = max_tracker_contexts
 
     def list_models(self) -> list[tuple[str, str]]:
         if not os.path.isdir(self._models_dir):
@@ -78,13 +80,14 @@ class UltralyticsRuntime:
         yolo = YOLO(path)
         names = {str(k): str(v) for k, v in getattr(yolo.model, "names", getattr(yolo, "names", {})).items()}
         task_type = _guess_task_type(yolo)
-        loaded = LoadedModel(id=model_id, filename=model_id, task_type=task_type, names=names, yolo=yolo)
+        loaded = LoadedModel(id=model_id, filename=model_id, task_type=task_type, names=names, path=path, yolo=yolo)
         try:
             self._warmup(loaded=loaded, device=device)
         except Exception:
             pass
         with self._lock:
             self._loaded = loaded
+            self._tracking_models.clear()
         return loaded
 
     def warmup_current(self, device: str) -> None:
@@ -94,9 +97,33 @@ class UltralyticsRuntime:
             return
         self._warmup(loaded=loaded, device=device)
 
-    def current(self) -> Optional[LoadedModel]:
+    def current(self) -> LoadedModel | None:
         with self._lock:
             return self._loaded
+
+    def release_tracker(self, tracker_key: str) -> None:
+        """释放单路跟踪上下文，避免停止流后继续占用模型/GPU 内存。"""
+        with self._lock:
+            self._tracking_models.pop(tracker_key, None)
+
+    def _tracking_model(self, loaded: LoadedModel, tracker_key: str) -> YOLO:
+        with self._lock:
+            existing = self._tracking_models.get(tracker_key)
+            if existing is not None:
+                return existing
+            if len(self._tracking_models) >= self._max_tracker_contexts:
+                raise RuntimeError(f"Too many tracking contexts (max={self._max_tracker_contexts})")
+
+        # 每条输入流使用独立 YOLO predictor/tracker 状态。创建过程同样串行，
+        # 防止与正在运行的推理同时初始化底层设备资源。
+        with self._predict_lock:
+            model = YOLO(loaded.path)
+        with self._lock:
+            current = self._loaded
+            if current is None or current.id != loaded.id:
+                raise RuntimeError("Model changed while creating tracking context")
+            winner = self._tracking_models.setdefault(tracker_key, model)
+            return winner
 
     def _warmup(self, *, loaded: LoadedModel, device: str) -> None:
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)
@@ -112,15 +139,13 @@ class UltralyticsRuntime:
         iou: float,
         class_filter: list[str],
         track: bool = False,
-        tracker_key: Optional[str] = None,
+        tracker_key: str | None = None,
     ) -> PredResponse:
         """
         单帧推理。
         - track=True 时改用 model.track(persist=True) 启用 ByteTrack。
-        - tracker_key：每条流（webcam/rtsp1/rtsp2…）需要独立 tracker 状态时用。
-          Ultralytics 的 persist 机制对单 model 实例做全局缓存，多路流共享会串号；
-          这里我们走串行 predict_lock，所以不同流之间默认按调用次序累计 id。
-          如需严格分离，可在外层维持多份模型副本——v1 暂不实现。
+        - tracker_key：每条流（webcam/rtsp1/rtsp2…）使用独立 predictor/tracker，
+          防止 Ultralytics persist 状态在多路输入之间串号。
         """
         with self._lock:
             loaded = self._loaded
@@ -131,9 +156,15 @@ class UltralyticsRuntime:
         rgb = image.convert("RGB")
         np_img = np.array(rgb)
         t1 = time.perf_counter()
+        inference_model = loaded.yolo
+        if track:
+            if not tracker_key:
+                raise ValueError("tracker_key is required when tracking is enabled")
+            inference_model = self._tracking_model(loaded, tracker_key)
+
         with self._predict_lock:
             if track:
-                results = loaded.yolo.track(
+                results = inference_model.track(
                     np_img,
                     verbose=False,
                     device=device,
@@ -143,7 +174,7 @@ class UltralyticsRuntime:
                     tracker="bytetrack.yaml",
                 )
             else:
-                results = loaded.yolo.predict(
+                results = inference_model.predict(
                     np_img,
                     verbose=False,
                     device=device,
@@ -161,7 +192,7 @@ class UltralyticsRuntime:
         # ---- boxes + tracking id ----
         kept_indices: list[int] = []
         kept_classes: list[str] = []
-        kept_track_ids: list[Optional[int]] = []
+        kept_track_ids: list[int | None] = []
         if getattr(r0, "boxes", None) is not None and r0.boxes is not None:
             boxes = r0.boxes
             xyxy = _to_numpy(boxes.xyxy)
@@ -177,7 +208,7 @@ class UltralyticsRuntime:
                     cls_name = loaded.names.get(cls_key, cls_key)
                     if class_filter and cls_name not in class_filter:
                         continue
-                    tid: Optional[int] = None
+                    tid: int | None = None
                     if ids is not None and i < len(ids):
                         try:
                             tid = int(ids[i])

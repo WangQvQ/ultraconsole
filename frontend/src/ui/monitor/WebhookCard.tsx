@@ -24,6 +24,7 @@ const FORMAT_OPTIONS: { value: WebhookFormat; labelKey: string }[] = [
 
 const LEVELS: LevelType[] = ['INFO', 'WARN', 'ERROR']
 const KINDS: NotifyKind[] = ['alert', 'line.cross', 'zone.enter', 'zone.leave']
+const nowSeconds = () => Date.now() / 1000
 
 const DEFAULT_CFG: WebhookConfig = {
   enabled: false,
@@ -61,7 +62,7 @@ export function WebhookCard() {
       const saved = await apiSetWebhook(merged)
       setCfg(saved)
     } catch (e) {
-      pushLog({ ts: Date.now() / 1000, level: 'WARN', event: 'webhook.save_failed', msg: String(e), fields: {} })
+      pushLog({ ts: nowSeconds(), level: 'WARN', event: 'webhook.save_failed', msg: String(e), fields: {} })
     } finally {
       setBusy(false)
     }

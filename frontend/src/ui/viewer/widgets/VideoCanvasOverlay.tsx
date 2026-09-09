@@ -46,6 +46,7 @@ export function VideoCanvasOverlay(props: {
 
   useEffect(() => {
     predRef.current = props.pred
+    if (!props.pred) trailsRef.current.clear()
     if (props.pred) {
       const active = new Set<number>()
       const w = props.pred.width
@@ -108,8 +109,8 @@ export function VideoCanvasOverlay(props: {
         const flags = flagsRef.current
         const evCfg = eventsRef.current
 
-        const srcW = pred?.width ?? 0
-        const srcH = pred?.height ?? 0
+        const srcW = pred?.width ?? video.videoWidth
+        const srcH = pred?.height ?? video.videoHeight
         if (srcW <= 0 || srcH <= 0) return
         const fc = fitContain(r.width, r.height, srcW, srcH)
 

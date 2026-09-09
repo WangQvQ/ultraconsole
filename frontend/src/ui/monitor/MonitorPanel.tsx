@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { apiExportLogsCsv } from '../../api/client'
 import { useT } from '../../i18n'
 import { useConsoleStore } from '../../store/useConsoleStore'
+import { formatVideoTime } from '../../utils/videoAnalysis'
 import { useEventTracker } from '../../utils/useEventTracker'
 import { useSystemStats } from '../../utils/useSystemStats'
 import { useWebhookDispatcher } from '../../utils/useWebhookDispatcher'
@@ -39,7 +40,10 @@ export function MonitorPanel() {
 
   function beep() {
     try {
-      const ctx = (audioRef.current ??= new (window.AudioContext || (window as any).webkitAudioContext)())
+      const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
+      const AudioContextImpl = window.AudioContext || audioWindow.webkitAudioContext
+      if (!AudioContextImpl) return
+      const ctx = (audioRef.current ??= new AudioContextImpl())
       const o = ctx.createOscillator()
       const g = ctx.createGain()
       o.type = 'sine'
@@ -55,7 +59,7 @@ export function MonitorPanel() {
   }
 
   useEffect(() => {
-    if (alertConfig.enabled && lastPred) {
+    if (alertConfig.enabled && lastPred && lastPred.source !== 'video') {
       const predKey = String(lastPred.frameId ?? lastPred.ts)
       if (lastPredKeyRef.current === predKey) return
       lastPredKeyRef.current = predKey
@@ -91,7 +95,7 @@ export function MonitorPanel() {
     if (alert.active || alert.streak !== 0) {
       setAlert({ active: false, streak: 0, reason: undefined })
     }
-  }, [alert.active, alert.streak, alertConfig.enabled, alertConfig.minFrames, alertConfig.sound, alertConfig.targetClass, lastPred, pushLog, setAlert])
+  }, [alert.active, alert.streak, alertConfig.enabled, alertConfig.minFrames, alertConfig.sound, alertConfig.targetClass, lastPred, pushLog, setAlert, t])
 
   async function onExport() {
     try {
@@ -123,7 +127,7 @@ export function MonitorPanel() {
       <Card
         title="Counters / Events"
         right={
-          <NeoButton onClick={resetCounters} style={{ padding: '6px 10px', fontSize: 11 }}>
+          <NeoButton disabled={lastPred?.source === 'video'} onClick={resetCounters} style={{ padding: '6px 10px', fontSize: 11 }}>
             {t('monitor.reset')}
           </NeoButton>
         }
@@ -167,6 +171,7 @@ export function MonitorPanel() {
                     {e.kind === 'line.cross' ? `LINE ${e.direction}` : e.kind === 'zone.enter' ? 'ENTER' : 'LEAVE'}
                   </span>
                   <span>{name}</span>
+                  {e.mediaTime !== undefined && <span>{formatVideoTime(e.mediaTime)}</span>}
                   <span className={styles.eventCls}>{e.cls}#{e.trackId ?? '-'}</span>
                 </div>
               )
@@ -268,4 +273,3 @@ export function MonitorPanel() {
     </div>
   )
 }
-

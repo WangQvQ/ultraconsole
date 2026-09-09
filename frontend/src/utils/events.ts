@@ -70,7 +70,14 @@ export function processFrame(args: {
         const s1 = side(l, prev)
         const s2 = side(l, cur)
         if (s1 === 0 || s2 === 0) continue
-        if (s1 * s2 < 0) {
+        // Intersect the finite counting segment, not its infinite extension.
+        const t = s1 / (s1 - s2)
+        const intersection = { x: prev.x + t * (cur.x - prev.x), y: prev.y + t * (cur.y - prev.y) }
+        const dx = l.b.x - l.a.x
+        const dy = l.b.y - l.a.y
+        const lengthSquared = dx * dx + dy * dy
+        const projection = (intersection.x - l.a.x) * dx + (intersection.y - l.a.y) * dy
+        if (s1 * s2 < 0 && lengthSquared > 0 && projection >= -1e-10 && projection <= lengthSquared + 1e-10) {
           const dir: 'in' | 'out' = s1 < 0 && s2 > 0 ? 'in' : 'out'
           const ck = lineCounts[l.id] || { in: 0, out: 0 }
           ck[dir] += 1

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ControlPanel } from '../ui/control/ControlPanel'
 import { MonitorPanel } from '../ui/monitor/MonitorPanel'
 import { SystemStatusBar } from '../ui/status/SystemStatusBar'
@@ -24,8 +24,8 @@ export function ConsolePage() {
     startBottomH: number
   } | null>(null)
 
-  const shellStyle = useMemo(
-    () => ({ ['--left-w' as any]: `${leftW}px`, ['--right-w' as any]: `${rightW}px`, ['--bottom-h' as any]: `${bottomH}px` }),
+  const shellStyle = useMemo<CSSProperties & Record<'--left-w' | '--right-w' | '--bottom-h', string>>(
+    () => ({ '--left-w': `${leftW}px`, '--right-w': `${rightW}px`, '--bottom-h': `${bottomH}px` }),
     [leftW, rightW, bottomH],
   )
 
@@ -112,4 +112,3 @@ export function ConsolePage() {
     </div>
   )
 }
-

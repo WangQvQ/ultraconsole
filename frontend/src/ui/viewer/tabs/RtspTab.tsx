@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { wsStreamUrl } from '../../../api/client'
+import { wsAuthProtocols, wsStreamUrl } from '../../../api/client'
 import { useT } from '../../../i18n'
 import { useConsoleStore } from '../../../store/useConsoleStore'
 import { createReconnectingWs, type ReconnectingWs, type WsState as RWsState } from '../../../utils/reconnectWs'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
+import { decodeBinaryFrame } from '../../../utils/binaryFrame'
 import { NeoButton } from '../../primitives/NeoButton'
 import { CanvasOverlay } from '../widgets/CanvasOverlay'
 import { EventEditOverlay } from '../widgets/EventEditOverlay'
@@ -12,14 +13,6 @@ import { TelemetryHUD } from '../widgets/TelemetryHUD'
 import styles from './RtspTab.module.css'
 
 type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
-
-function b64ToBlobUrl(b64: string) {
-  const bin = atob(b64)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  const blob = new Blob([bytes], { type: 'image/jpeg' })
-  return URL.createObjectURL(blob)
-}
 
 export function RtspTab() {
   const t = useT()
@@ -157,6 +150,7 @@ export function RtspTab() {
 
     const ws = createReconnectingWs({
       url: wsStreamUrl(),
+      protocols: wsAuthProtocols(),
       onState: handleState,
       onOpen: () => {
         // 每次连接（含重连）都重发 rtsp.start
@@ -165,15 +159,16 @@ export function RtspTab() {
       },
       onMessage: (data) => {
         if (!runningRef.current) return
-        const msg = data as Record<string, unknown>
-        if (!msg || typeof msg !== 'object') return
-        if (msg.type === 'frame' && typeof msg.imageJpegBase64 === 'string') {
-          const next = b64ToBlobUrl(msg.imageJpegBase64)
+        const binaryFrame = decodeBinaryFrame(data)
+        if (binaryFrame) {
+          const next = URL.createObjectURL(binaryFrame.jpeg)
           if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current)
           frameUrlRef.current = next
           setFrameUrl(next)
           return
         }
+        const msg = data as Record<string, unknown>
+        if (!msg || typeof msg !== 'object') return
         if (msg.type === 'pred') {
           setLastPred(msg as never)
           return
@@ -282,6 +277,7 @@ export function RtspTab() {
             <CanvasOverlay imgRef={imgRef} pred={filteredPred} showBBox={osd.bbox} showLabels={osd.labels} showHeatmap={osd.heatmap} />
             <RoiOverlay anchorRef={imgRef} />
             <EventEditOverlay
+              key={`${editTool}-${editTool !== 'none'}`}
               anchorRef={imgRef}
               enabled={editTool !== 'none'}
               mode={editTool === 'line' ? 'line' : 'zone'}
@@ -295,4 +291,3 @@ export function RtspTab() {
     </div>
   )
 }
-

@@ -16,7 +16,7 @@
     "selectModelHint": "请选择模型（backend/models）",
     "warming": "预热中…",
     "classHint": "选择模型后，这里会出现类别标签。",
-    "enableTracking": "启用 ByteTrack 跟踪（Webcam / RTSP）",
+    "enableTracking": "启用 ByteTrack（Webcam / RTSP / Wall；Video 自动启用）",
     "trackingHint": "开启后 bbox 会带 trackId、轨迹 & 计数线/区域生效。",
     "drawLineHint": "画线/区域：在画面右键菜单切换\"Line / Zone\"工具，或使用 ROI 工具旁的快捷按钮。"
   },
@@ -29,7 +29,23 @@
   },
   "video": {
     "selectVideo": "选择视频",
-    "dropHint": "松开以载入视频"
+    "dropHint": "松开以载入视频",
+    "analyze": "从头分析（含跟踪）",
+    "exportReport": "导出分析 CSV",
+    "finishEdit": "完成绘制",
+    "drawLine": "画计数线",
+    "drawZone": "画计数区",
+    "clearRules": "清空线/区",
+    "analysisHint": "按设定 FPS 顺序采样，处理速度取决于推理性能。每次开始会清空统计并从头分析；低采样率仍可能漏检。修改模型、参数或规则会停止本次分析。录像事件不发送实时告警。",
+    "lineHint": "点击两个位置创建计数线，完成后点击“完成绘制”。",
+    "zoneHint": "依次点击多边形顶点，至少三个点后点击起点闭合。",
+    "running": "分析中",
+    "completed": "分析完成",
+    "stopped": "已停止（部分结果）",
+    "error": "分析失败（部分结果）",
+    "frames": "帧",
+    "events": "事件",
+    "decodeError": "无法读取该视频，请使用浏览器支持的视频格式。"
   },
   "webcam": {
     "startPreview": "启动预览",

@@ -61,14 +61,17 @@
 - **Engine**：CPU/CUDA 切换；同设备直接 no-op，不同设备只 warmup（不重 load 权重）
 - **NMS**：Conf/IoU 滑块实时调整，前端 200ms 防抖回写
 - **Class Filter**：多选标签过滤类别
-- **Tracking**：勾选启用 ByteTrack（仅 Webcam / RTSP / Wall），bbox 自动带 `#trackId`
+- **Tracking**：勾选启用 ByteTrack（Webcam / RTSP / Wall；Video 分析自动启用），bbox 自动带 `#trackId`
 
 ### 输入源
 - **Image**：上传或**拖拽**即推理；阈值变化自动重跑（带 pending 队列）
-- **Video**：本地视频 + 抽帧推理（可设目标 FPS，可丢帧），支持**拖拽**
+- **Video**：本地视频顺序采样分析（可设 FPS），支持**拖拽**、独立 ByteTrack 跟踪、越线/区域计数、视频时间与分析 CSV 导出。
 - **Webcam**：浏览器摄像头实时推理（WS 推帧；toBlob 异步编码 + 背压控制）
 - **RTSP**：填地址即连（后端拉流 → JPEG → WS）
 - **Wall**：1×1 / 2×1 / 2×2 / 3×2 / 3×3 多路 RTSP 网格，每格独立 OSD + bbox 计数 HUD
+
+Video 使用方式：选择模型和视频，画计数线或多边形区域，再点击「从头分析（含跟踪）」。每次运行都从头清空统计；按设定 FPS 顺序处理采样帧，推理较慢时延长分析时间，不跳过采样点。低采样率仍可能漏检，不等同于逐原始帧分析。停止或修改模型、参数、规则后保留部分结果，CSV 标注完成/停止/失败状态，并包含规则快照、计数汇总及全部事件的视频时间（不受界面最近 500 条限制）。录像分析不发送实时 Webhook 告警。切换文件或离开 Video 前请导出报告。区域 total 表示累计进入次数，包含首次检测时已在区域内的目标，并非去重人数。
+
 
 ### 可视化与效率
 - **OSD**：BBox / Labels / Masks（实例分割半透明）/ Keypoints（COCO-17 骨架）/ Trails（轨迹尾迹）
@@ -167,6 +170,19 @@ npm run dev
 | Webhook 持久化 | `backend/.webhook.json`（gitignore） | 环境变量 `ULTRA_WEBHOOK_FILE` |
 | 默认设备 | `cpu` | 环境变量 `ULTRA_DEVICE=cuda` |
 
+### 安全与资源限制
+
+生产或共享网络部署建议从 `backend/.env.example` 复制配置：
+
+- `ULTRA_API_TOKEN`：设置后保护除健康检查外的 REST API 和全部 WebSocket；前端构建时设置同值的 `VITE_ULTRA_API_TOKEN`
+- `ULTRA_CORS_ORIGINS`：允许的前端 Origin，逗号分隔；默认仅本机开发地址
+- `ULTRA_MAX_UPLOAD_BYTES` / `ULTRA_MAX_IMAGE_PIXELS`：上传文件与解码后像素上限
+- `ULTRA_MAX_RTSP_STREAMS` / `ULTRA_MAX_RTSP_FPS`：并发流数与单流 FPS 上限
+- `ULTRA_ALLOWED_RTSP_HOSTS`：可选的 RTSP 主机白名单
+- `ULTRA_ALLOW_PRIVATE_WEBHOOKS`：默认 `false`，防止 Webhook 访问本机、内网和链路本地地址
+
+API Token 会被编译进浏览器端资源，因此它是部署级共享访问凭证，不应复用于其他系统。
+
 ## REST / WebSocket API
 
 ### REST
@@ -178,7 +194,7 @@ npm run dev
 | `POST` | `/api/engine/select` | 切换 CPU/CUDA（`{device}`，同设备 no-op） |
 | `GET` `/POST` | `/api/params` | 获取/更新 `{conf, iou, classFilter, track}` |
 | `POST` | `/api/infer/image` | 单图推理（`multipart/form-data: file`） |
-| `POST` | `/api/infer/frame` | Video 抽帧推理（同 image 入口） |
+| `POST` | `/api/infer/frame` | 兼容旧客户端的单帧推理（同 image 入口）；Video 分析使用 `/ws/infer` |
 | `GET` | `/api/system/stats` | CPU/GPU/Mem + 推理延迟分位 |
 | `GET` `/POST` | `/api/webhook` | 取/存 webhook 配置 |
 | `POST` | `/api/webhook/test` | 联通性测试 |
@@ -190,7 +206,7 @@ npm run dev
 - `/ws/stream` — RTSP 多路通道：
   - 客户端发 `{type:'rtsp.start', streamId, url, fps, conf, iou, classFilter, track}`
   - `{type:'rtsp.stop', streamId}` 单路停 / `{type:'rtsp.stopAll'}` 全停
-  - 服务端回 `{type:'frame'|'pred'|'log', streamId, ...}`
+  - 视频帧使用二进制包返回：`uint32 JSON头长度 + JSON元数据 + JPEG`，预测和日志仍为 JSON
   - 同样支持 `ping/pong`
 
 ## 使用"魔改版 ultralytics"的方式
@@ -326,4 +342,4 @@ V1 优先"可用与易集成"：前端只需填地址即可出画面；后续如
 - 路线图（已落地以 ✅ 标）：
   - ✅ 多路监控墙、ByteTrack + 事件、分割/姿态、GPU/CPU HUD、延迟分位、Webhook、WS 重连、拖拽上传、配置导入导出
   - ✅ 中英双语 i18n
-  - ⏳ 模型 A/B 对比、Tracking 热力图、Docker Compose、SQLite 持久化、Bearer Token 鉴权、截图导出、插件系统
+  - ⏳ 模型 A/B 对比、Tracking 热力图、SQLite 持久化、Bearer Token 鉴权、截图导出、插件系统

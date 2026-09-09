@@ -6,7 +6,8 @@ import json
 import threading
 import time
 from collections import deque
-from typing import Any, Deque, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 from .schemas import LogEntry
 
@@ -16,7 +17,7 @@ Level = Literal["INFO", "WARN", "ERROR"]
 class LogStore:
     def __init__(self, maxlen: int = 10_000) -> None:
         self._lock = threading.Lock()
-        self._buf: Deque[LogEntry] = deque(maxlen=maxlen)
+        self._buf: deque[LogEntry] = deque(maxlen=maxlen)
 
     def append(
         self,

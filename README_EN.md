@@ -60,14 +60,17 @@ An **industrial-grade object detection visualization console** for quality inspe
 - **Engine**: CPU/CUDA toggle; same device = no-op, different device = warmup only (no weight reload)
 - **NMS**: Conf/IoU sliders with live adjustment; frontend 200ms debounce writeback
 - **Class Filter**: Multi-select label filtering
-- **Tracking**: Enable ByteTrack (Webcam / RTSP / Wall / Video); bboxes auto-tagged with `#trackId`
+- **Tracking**: Enable ByteTrack (Webcam / RTSP / Wall; automatic for Video analysis); bboxes auto-tagged with `#trackId`
 
 ### Input Sources
 - **Image**: Upload or **drag-and-drop** for instant inference; threshold changes trigger re-run (with pending queue)
-- **Video**: Local video + frame extraction inference (configurable target FPS, drop-frame support), **drag-and-drop** supported
+- **Video**: Sequential sampling of local videos (configurable FPS), **drag & drop**, isolated ByteTrack tracking, line/zone counting, video timestamps, and analysis CSV export.
 - **Webcam**: Browser camera real-time inference (WS frame push; toBlob async encoding + backpressure)
 - **RTSP**: Enter address to connect (backend pulls stream → JPEG → WS)
 - **Wall**: 1×1 / 2×1 / 2×2 / 3×2 / 3×3 multi-RTSP grid, each cell with independent OSD + bbox count HUD
+
+For Video, select a model and file, draw counting lines/zones, then choose **Analyze from start (with tracking)**. Every run resets counts and processes samples sequentially from the beginning. Slow inference extends processing time instead of skipping samples; low sampling rates may still miss events. This is not analysis of every original frame. Stopping or changing the model, parameters or rules preserves partial results. CSV includes completion status, rule snapshots, totals and every event's video timestamp, without the UI's 500-event limit. Recorded-video analysis does not send live Webhook alerts. Export before changing files or leaving Video. Zone totals count entries (including initial observations inside a zone), not unique people.
+
 
 ### Visualization & Efficiency
 - **OSD**: BBox / Labels / Masks (instance segmentation semi-transparent) / Keypoints (COCO-17 skeleton) / Trails (trajectory tail)
@@ -166,6 +169,19 @@ The frontend dev server proxies `/api` and `/ws` to `http://127.0.0.1:8001`.
 | Webhook persistence | `backend/.webhook.json` (gitignored) | Env `ULTRA_WEBHOOK_FILE` |
 | Default device | `cpu` | Env `ULTRA_DEVICE=cuda` |
 
+### Security and resource limits
+
+For production or shared-network deployments, start from `backend/.env.example`:
+
+- `ULTRA_API_TOKEN` protects every REST endpoint except health and all WebSockets; build the frontend with the same `VITE_ULTRA_API_TOKEN`
+- `ULTRA_CORS_ORIGINS` is a comma-separated Origin allowlist; it defaults to local development origins
+- `ULTRA_MAX_UPLOAD_BYTES` / `ULTRA_MAX_IMAGE_PIXELS` limit uploads and decoded image size
+- `ULTRA_MAX_RTSP_STREAMS` / `ULTRA_MAX_RTSP_FPS` cap concurrent streams and per-stream FPS
+- `ULTRA_ALLOWED_RTSP_HOSTS` optionally restricts RTSP targets to exact hosts
+- `ULTRA_ALLOW_PRIVATE_WEBHOOKS` defaults to `false`, blocking loopback, private and link-local webhook targets
+
+The token is compiled into the browser bundle, so treat it as a deployment-level shared access credential and never reuse it for another system.
+
 ## REST / WebSocket API
 
 ### REST
@@ -177,7 +193,7 @@ The frontend dev server proxies `/api` and `/ws` to `http://127.0.0.1:8001`.
 | `POST` | `/api/engine/select` | Switch CPU/CUDA (`{device}`, same device = no-op) |
 | `GET` `/POST` | `/api/params` | Get/update `{conf, iou, classFilter, track}` |
 | `POST` | `/api/infer/image` | Single image inference (`multipart/form-data: file`) |
-| `POST` | `/api/infer/frame` | Video frame inference (same as image entry) |
+| `POST` | `/api/infer/frame` | Legacy single-frame inference (same as image entry); Video analysis uses `/ws/infer` |
 | `GET` | `/api/system/stats` | CPU/GPU/Mem + inference latency percentiles |
 | `GET` `/POST` | `/api/webhook` | Get/save webhook config |
 | `POST` | `/api/webhook/test` | Connectivity test |
@@ -189,7 +205,7 @@ The frontend dev server proxies `/api` and `/ws` to `http://127.0.0.1:8001`.
 - `/ws/stream` — RTSP multi-channel:
   - Client sends `{type:'rtsp.start', streamId, url, fps, conf, iou, classFilter, track}`
   - `{type:'rtsp.stop', streamId}` stops one stream / `{type:'rtsp.stopAll'}` stops all
-  - Server returns `{type:'frame'|'pred'|'log', streamId, ...}`
+  - Frames use a binary packet: `uint32 JSON-header length + JSON metadata + JPEG`; predictions and logs remain JSON
   - Also supports `ping/pong`
 
 ## Using a Custom ultralytics Fork
@@ -324,4 +340,4 @@ Yes. The exported file contains sensitive URLs without masking in the UI. For st
   - Feature: suggest opening an Issue first to discuss interface and interaction
 - Roadmap (✅ = shipped):
   - ✅ Multi-camera Wall, ByteTrack + Events, Segmentation/Pose, GPU/CPU HUD, Latency percentiles, Webhook, WS reconnect, Drag-and-drop, Config import/export
-  - ⏳ Model A/B comparison, Tracking heatmap, Docker Compose, SQLite persistence, Bearer Token auth, i18n, Screenshot export, Plugin system
+  - ⏳ Model A/B comparison, Tracking heatmap, SQLite persistence, Bearer Token auth, i18n, Screenshot export, Plugin system

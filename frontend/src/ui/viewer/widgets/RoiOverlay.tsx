@@ -14,9 +14,8 @@ function normalizePoly(poly: RoiPoint[]) {
 
 function getSourceSize(el: HTMLElement | null): { w: number; h: number } | null {
   if (!el) return null
-  const any = el as any
-  const w = Number(any.naturalWidth ?? any.videoWidth ?? 0)
-  const h = Number(any.naturalHeight ?? any.videoHeight ?? 0)
+  const w = el instanceof HTMLImageElement ? el.naturalWidth : el instanceof HTMLVideoElement ? el.videoWidth : 0
+  const h = el instanceof HTMLImageElement ? el.naturalHeight : el instanceof HTMLVideoElement ? el.videoHeight : 0
   return w && h ? { w, h } : null
 }
 
@@ -112,7 +111,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
 
   /* ---- main effect: resize + draw + events ---- */
   useEffect(() => {
-    const canvas = canvasRef.current
+    const canvas = canvasRef.current!
     if (!canvas) return
 
     let alive = true
@@ -164,7 +163,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
     }
 
     // preview ref for draw loop
-    const previewRef = { current: preview as RoiPoint | undefined }
+    const previewRef = { current: undefined as RoiPoint | undefined }
     // sync preview from React state
     // (we update previewRef in the poly mousemove handler below)
 
@@ -188,7 +187,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
       dragCY = y
       redraw()
     }
-    function onDocUp(e: MouseEvent) {
+    function onDocUp() {
       if (!dragging) return
       dragging = false
       document.removeEventListener('mousemove', onDocMove)
@@ -279,7 +278,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
       }
     }
 
-    function onDblClick(e: MouseEvent) {
+    function onDblClick() {
       const s = roiRef.current
       if (s.mode !== 'poly' || s.closed) return
       const poly2 = normalizePoly(s.polygon)
@@ -339,7 +338,6 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
   }, [props.anchorRef, roi.enabled]) // rebind when anchor changes or ROI toggled on
 
   // redraw when store state changes
-  const roiKey = `${roi.enabled}-${roi.mode}-${roi.closed}-${roi.polygon.length}`
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -358,7 +356,7 @@ export function RoiOverlay(props: { anchorRef: React.RefObject<HTMLElement | nul
     if (!src) { ctx.clearRect(0, 0, r.width, r.height); return }
     const pv = (roi.mode === 'poly' && !roi.closed) ? preview : undefined
     drawPoly(ctx, roi.polygon, r.width, r.height, src.w, src.h, pv, roi.closed)
-  }, [roiKey, preview, roi.polygon, props.anchorRef])
+  }, [roi.enabled, roi.mode, roi.closed, preview, roi.polygon, props.anchorRef])
 
   if (!roi.enabled) return null
 

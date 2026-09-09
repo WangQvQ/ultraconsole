@@ -1,4 +1,17 @@
-import type { DeviceType, LogEntry, ModelInfo, Params, PredResponse, SystemStats } from '../store/useConsoleStore'
+import type {
+  DeviceType, ModelInfo, NotifyRequest, NotifyResult, Params, PredResponse,
+  SystemStats, WebhookConfig,
+} from './contracts'
+
+export type * from './contracts'
+
+const API_TOKEN = String(import.meta.env.VITE_ULTRA_API_TOKEN ?? '').trim()
+
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const headers = new Headers(init.headers)
+  if (API_TOKEN) headers.set('authorization', `Bearer ${API_TOKEN}`)
+  return fetch(input, { ...init, headers })
+}
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -9,17 +22,17 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export async function apiHealth() {
-  const res = await fetch('/api/health')
+  const res = await apiFetch('/api/health')
   return json<{ ok: boolean; ts: number }>(res)
 }
 
 export async function apiListModels() {
-  const res = await fetch('/api/models')
+  const res = await apiFetch('/api/models')
   return json<ModelInfo[]>(res)
 }
 
 export async function apiSelectModel(modelId: string) {
-  const res = await fetch('/api/models/select', {
+  const res = await apiFetch('/api/models/select', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ modelId }),
@@ -28,7 +41,7 @@ export async function apiSelectModel(modelId: string) {
 }
 
 export async function apiSelectEngine(device: DeviceType) {
-  const res = await fetch('/api/engine/select', {
+  const res = await apiFetch('/api/engine/select', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ device }),
@@ -37,12 +50,12 @@ export async function apiSelectEngine(device: DeviceType) {
 }
 
 export async function apiGetParams() {
-  const res = await fetch('/api/params')
+  const res = await apiFetch('/api/params')
   return json<Params>(res)
 }
 
 export async function apiUpdateParams(p: Params) {
-  const res = await fetch('/api/params', {
+  const res = await apiFetch('/api/params', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(p),
@@ -53,7 +66,7 @@ export async function apiUpdateParams(p: Params) {
 export async function apiInferImage(file: File) {
   const fd = new FormData()
   fd.append('file', file)
-  const res = await fetch('/api/infer/image', {
+  const res = await apiFetch('/api/infer/image', {
     method: 'POST',
     body: fd,
   })
@@ -64,7 +77,7 @@ export async function apiInferFrame(file: Blob) {
   const fd = new FormData()
   // 后端接口名为 file
   fd.append('file', new File([file], 'frame.jpg', { type: 'image/jpeg' }))
-  const res = await fetch('/api/infer/frame', {
+  const res = await apiFetch('/api/infer/frame', {
     method: 'POST',
     body: fd,
   })
@@ -72,54 +85,23 @@ export async function apiInferFrame(file: Blob) {
 }
 
 export async function apiExportLogsCsv() {
-  const res = await fetch('/api/logs/export.csv')
+  const res = await apiFetch('/api/logs/export.csv')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return await res.text()
 }
 
 export async function apiSystemStats() {
-  const res = await fetch('/api/system/stats')
+  const res = await apiFetch('/api/system/stats')
   return json<SystemStats>(res)
 }
 
-// ---- Webhook ----
-export type WebhookFormat = 'generic' | 'dingtalk' | 'wecom' | 'feishu' | 'slack'
-export type NotifyKind = 'alert' | 'line.cross' | 'zone.enter' | 'zone.leave' | 'test'
-export type LevelType = 'INFO' | 'WARN' | 'ERROR'
-
-export type WebhookConfig = {
-  enabled: boolean
-  url: string
-  format: WebhookFormat
-  minLevel: LevelType
-  cooldownSec: number
-  includeKinds: NotifyKind[]
-  timeoutSec: number
-}
-
-export type NotifyResult = {
-  ok: boolean
-  skipped?: boolean
-  reason?: string
-  httpStatus?: number
-}
-
-export type NotifyRequest = {
-  kind: NotifyKind
-  level?: LevelType
-  title: string
-  msg: string
-  ref?: string
-  fields?: Record<string, unknown>
-}
-
 export async function apiGetWebhook() {
-  const res = await fetch('/api/webhook')
+  const res = await apiFetch('/api/webhook')
   return json<WebhookConfig>(res)
 }
 
 export async function apiSetWebhook(cfg: WebhookConfig) {
-  const res = await fetch('/api/webhook', {
+  const res = await apiFetch('/api/webhook', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(cfg),
@@ -128,12 +110,12 @@ export async function apiSetWebhook(cfg: WebhookConfig) {
 }
 
 export async function apiTestWebhook() {
-  const res = await fetch('/api/webhook/test', { method: 'POST' })
+  const res = await apiFetch('/api/webhook/test', { method: 'POST' })
   return json<NotifyResult>(res)
 }
 
 export async function apiNotify(req: NotifyRequest) {
-  const res = await fetch('/api/notify', {
+  const res = await apiFetch('/api/notify', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),
@@ -151,15 +133,11 @@ export function wsStreamUrl() {
   return `${proto}//${location.host}/ws/stream`
 }
 
-export type WsPredMessage = { type: 'pred'; streamId?: string } & PredResponse
-export type WsLogMessage = { type: 'log'; streamId?: string } & LogEntry
-export type WsFrameMessage = {
-  type: 'frame'
-  streamId?: string
-  frameId: string
-  ts: number
-  imageJpegBase64: string
-  width: number
-  height: number
+export function wsAuthProtocols(): string[] | undefined {
+  if (!API_TOKEN) return undefined
+  const bytes = new TextEncoder().encode(API_TOKEN)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  const encoded = btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+  return [`ultra-token.${encoded}`]
 }
-

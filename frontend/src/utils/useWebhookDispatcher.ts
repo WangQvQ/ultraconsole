@@ -51,7 +51,7 @@ export function useWebhookDispatcher() {
   useEffect(() => {
     const prevLen = lastEventsLenRef.current
     if (events.length > prevLen) {
-      const added = events.slice(prevLen)
+      const added = events.slice(prevLen).filter((event) => event.source !== 'video')
       pendingRef.current.push(...added)
       if (flushTimerRef.current === null) {
         flushTimerRef.current = window.setTimeout(() => {

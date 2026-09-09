@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { wsStreamUrl } from '../../../api/client'
+import { wsAuthProtocols, wsStreamUrl } from '../../../api/client'
 import { useT } from '../../../i18n'
 import {
   useConsoleStore,
@@ -7,6 +7,7 @@ import {
 } from '../../../store/useConsoleStore'
 import { createReconnectingWs, type ReconnectingWs } from '../../../utils/reconnectWs'
 import { filterBBoxesByRoiNormalized } from '../../../utils/roi'
+import { decodeBinaryFrame } from '../../../utils/binaryFrame'
 import { NeoButton } from '../../primitives/NeoButton'
 import { CanvasOverlay } from '../widgets/CanvasOverlay'
 import styles from './WallTab.module.css'
@@ -20,13 +21,6 @@ function gridFor(n: GridSize) {
   if (n === 4) return { cols: 2, rows: 2 }
   if (n === 6) return { cols: 3, rows: 2 }
   return { cols: 3, rows: 3 }
-}
-
-function b64ToBlobUrl(b64: string) {
-  const bin = atob(b64)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }))
 }
 
 export function WallTab() {
@@ -58,18 +52,8 @@ export function WallTab() {
   }
 
   useEffect(() => {
-    setCells((prev) => {
-      const next = buildCells(size)
-      // 保留同位置 url
-      for (let i = 0; i < next.length; i++) {
-        const old = prev[i]
-        if (old) next[i] = { ...next[i], url: old.url }
-      }
-      return next
-    })
-  }, [size])
-
-  useEffect(() => {
+    const cellFrames = cellsRef.current
+    const startMessages = startMsgsRef.current
     return () => {
       const ws = wsRef.current
       wsRef.current = null
@@ -79,11 +63,11 @@ export function WallTab() {
         // ignore
       }
       ws?.close()
-      for (const v of cellsRef.current.values()) {
+      for (const v of cellFrames.values()) {
         if (v.frameUrl) URL.revokeObjectURL(v.frameUrl)
       }
-      cellsRef.current.clear()
-      startMsgsRef.current.clear()
+      cellFrames.clear()
+      startMessages.clear()
     }
   }, [])
 
@@ -91,6 +75,7 @@ export function WallTab() {
     if (wsRef.current) return wsRef.current
     const ws = createReconnectingWs({
       url: wsStreamUrl(),
+      protocols: wsAuthProtocols(),
       onState: (s, info) => {
         if (s === 'open') {
           pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'wall.ws.open', msg: 'connected', fields: {} })
@@ -113,18 +98,20 @@ export function WallTab() {
         }
       },
       onMessage: (data) => {
-        const msg = data as Record<string, unknown>
-        if (!msg || typeof msg !== 'object') return
-        const sid = String((msg as { streamId?: unknown }).streamId ?? '')
-        if (!sid) return
-        if (msg.type === 'frame' && typeof msg.imageJpegBase64 === 'string') {
-          const next = b64ToBlobUrl(msg.imageJpegBase64)
+        const binaryFrame = decodeBinaryFrame(data)
+        if (binaryFrame) {
+          const sid = binaryFrame.meta.streamId
+          const next = URL.createObjectURL(binaryFrame.jpeg)
           const old = cellsRef.current.get(sid)
           if (old?.frameUrl) URL.revokeObjectURL(old.frameUrl)
           cellsRef.current.set(sid, { frameUrl: next })
           setCells((prev) => prev.map((c) => (c.id === sid ? { ...c, frameUrl: next } : c)))
           return
         }
+        const msg = data as Record<string, unknown>
+        if (!msg || typeof msg !== 'object') return
+        const sid = String((msg as { streamId?: unknown }).streamId ?? '')
+        if (!sid) return
         if (msg.type === 'pred') {
           const pred = msg as unknown as PredResponse
           setCells((prev) => prev.map((c) => (c.id === sid ? { ...c, pred } : c)))
@@ -201,7 +188,17 @@ export function WallTab() {
           <select
             className={styles.select}
             value={size}
-            onChange={(e) => setSize(Number(e.target.value) as GridSize)}
+            onChange={(e) => {
+              const nextSize = Number(e.target.value) as GridSize
+              setSize(nextSize)
+              setCells((previous) => {
+                const next = buildCells(nextSize)
+                for (let i = 0; i < next.length; i++) {
+                  if (previous[i]) next[i] = { ...next[i], url: previous[i].url }
+                }
+                return next
+              })
+            }}
           >
             <option value={1}>1×1</option>
             <option value={2}>2×1</option>

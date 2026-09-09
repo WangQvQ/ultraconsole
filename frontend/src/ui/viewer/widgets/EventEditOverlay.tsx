@@ -43,13 +43,6 @@ export function EventEditOverlay(props: {
   const [zoneDraft, setZoneDraft] = useState<RoiPointXY[]>([])
   const [hoverPt, setHoverPt] = useState<RoiPointXY | null>(null)
 
-  // 切换模式时清空草稿
-  useEffect(() => {
-    setPreviewLine(null)
-    setZoneDraft([])
-    setHoverPt(null)
-  }, [props.mode, props.enabled])
-
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
