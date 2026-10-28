@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Vite-8.0-646CFF?logo=vite&logoColor=white&style=flat-square" alt="Vite" />
   <img src="https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white&style=flat-square" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Ultralytics-YOLOv8-FF6B00?logo=ultralytics&logoColor=white&style=flat-square" alt="YOLOv8" />
+  <img src="https://img.shields.io/badge/Ultralytics-8.4.191-FF6B00?logo=ultralytics&logoColor=white&style=flat-square" alt="Ultralytics 8.4.191" />
   <img src="https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white&style=flat-square" alt="OpenCV" />
 </p>
 
@@ -33,11 +33,25 @@
   <img src="https://img.shields.io/badge/Heatmap-Spatial-EAB308?style=flat-square" alt="Heatmap" />
 </p>
 
-An **industrial-grade object detection visualization console** for quality inspection, surveillance, and algorithm tuning: hot-swap models, live parameter tuning, Image/Video/Webcam/RTSP/Multi-camera Wall input, OSD overlays (segmentation/pose), ByteTrack tracking + line/zone counting events, spatial heatmap, GPU/CPU/latency monitoring, Webhook alerting, config import/export, WebSocket auto-reconnect.
+A **multi-task vision inference console** for quality inspection, surveillance, and algorithm tuning: hot-swap models, live parameter tuning, Image/Video/Webcam/RTSP/Multi-camera Wall input, OSD overlays (segmentation/pose), ByteTrack tracking + line/zone counting events, spatial heatmap, GPU/CPU/latency monitoring, Webhook alerting, config import/export, WebSocket auto-reconnect.
+
+## Current models and depth estimation
+
+The console targets **Ultralytics 8.4.191**, retains YOLOv8 / YOLO11 detection compatibility and supports all seven YOLO26 tasks: detection, instance segmentation, pose, classification Top-K, oriented boxes, semantic segmentation and monocular depth. Controls and video tracking follow the inspected model capabilities.
+
+Use a depth checkpoint as the primary model, or select an auxiliary depth model alongside a box-producing primary model. Fusion runs on the same decoded frame, using valid-pixel medians inside segmentation masks or an explicitly labeled box-center approximation. Fixed depth color ranges, overlay opacity, sampled-value inspection, sampled NPY and preview PNG downloads are available. Absolute depth scale needs camera-specific validation or calibration. Hover, preview and NPY use a map sampled to at most 256 pixels on the longest side; statistics and object fusion use the full model output.
+
+Place `yolo26n.pt`, `yolo26n-seg.pt`, `yolo26n-pose.pt`, `yolo26n-cls.pt`, `yolo26n-obb.pt`, `yolo26n-sem.pt` or `yolo26n-depth.pt` in `backend/models/`. To explicitly download and verify the official checkpoints:
+
+```bash
+python backend/scripts/smoke_models.py --download --device cpu
+```
+
+See [compatibility notes](docs/compatibility.md) for contracts and export limitations, and [CONTRIBUTING.md](CONTRIBUTING.md) for adding adapters, tests and reproducible reports. Model compatibility and feature-request Issue templates are included.
 
 ## Screenshot
 
-![Ultralytics Industrial Inference Console Preview](preview.png)
+![Ultralytics Industrial Inference Console Preview](docs/images/depth-fusion.png)
 
 ## Highlights
 
@@ -61,7 +75,7 @@ An **industrial-grade object detection visualization console** for quality inspe
 - **Engine**: CPU/CUDA toggle; same device = no-op, different device = warmup only (no weight reload)
 - **NMS**: Conf/IoU sliders with live adjustment; frontend 200ms debounce writeback
 - **Class Filter**: Multi-select label filtering
-- **Tracking**: Enable ByteTrack (Webcam / RTSP / Wall; automatic for Video analysis); bboxes auto-tagged with `#trackId`
+- **Tracking**: Enable ByteTrack (Webcam / RTSP / Wall; automatic for box-producing Video tasks); bboxes auto-tagged with `#trackId`
 
 ### Input Sources
 
@@ -93,7 +107,7 @@ An **industrial-grade object detection visualization console** for quality inspe
 
 1. Select a model in Model Hub, open **Video**, and select or drop a local video supported by your browser.
 2. Choose **Draw counting line** and click two endpoints, or choose **Draw counting zone**, click at least three vertices, then click the first vertex to close the polygon. Click **Finish drawing** when ready.
-3. Set the sampling FPS (1–30, default 8) and choose **Analyze from start (with tracking)**. Video enables ByteTrack automatically, independently of the live-stream Tracking checkbox.
+3. Set the sampling FPS (1–30, default 8) and choose **Analyze from start**. Video enables ByteTrack automatically for box-producing tasks, independently of the live-stream Tracking checkbox.
 4. Read line directions, zone occupancy, cumulative entries and video timestamps in Counters / Events.
 5. After completion or stopping, choose **Export analysis CSV**. Export before switching files or leaving Video; the report is held only in the current page's memory.
 
@@ -229,11 +243,13 @@ The token is compiled into the browser bundle, so treat it as a deployment-level
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/health` | Health check |
+| `GET` | `/api/health` | Health, runtime version and schema version |
+| `GET` | `/api/session` | Current model, auxiliary depth model, device and parameters |
 | `GET` | `/api/models` | List available models in `models/` + current loaded model backfill |
 | `POST` | `/api/models/select` | Load model (`{modelId}`, path whitelist + extension validation) |
+| `POST` | `/api/models/depth` | Select auxiliary depth (`{modelId}`); `null` disables fusion |
 | `POST` | `/api/engine/select` | Switch CPU/CUDA (`{device}`, same device = no-op) |
-| `GET` `/POST` | `/api/params` | Get/update `{conf, iou, classFilter, track}` |
+| `GET` `/POST` | `/api/params` | Get/update `{conf, iou, classFilter, track, imgsz, maxDet, nms, depthMin, depthMax}` |
 | `POST` | `/api/infer/image` | Single image inference (`multipart/form-data: file`) |
 | `POST` | `/api/infer/frame` | Legacy single-frame inference (same as image entry); Video analysis uses `/ws/infer` |
 | `GET` | `/api/system/stats` | CPU/GPU/Mem + inference latency percentiles |
@@ -368,7 +384,7 @@ No: the repo's `.gitignore` already excludes `backend/models/**/*.pt|onnx|engine
 
 ### 3) Will trackId collide across streams in multi-camera Wall?
 
-The runtime assigns separate model instances by tracking key: Webcam/Video use connection keys, while RTSP/Wall use `streamId`. Streams within a Wall do not share tracking state, but numeric IDs may repeat across streams and are not cross-camera identities. Different clients sharing a backend should avoid reusing RTSP `streamId` values. Independent instances increase RAM/VRAM usage.
+The runtime assigns separate model instances by tracking key: Webcam/Video use connection keys, while RTSP/Wall use connection, `streamId` and worker-instance keys. Streams within a Wall do not share tracking state, but numeric IDs may repeat across streams and are not cross-camera identities. Different client connections and restarted RTSP workers have distinct tracking keys. Independent instances increase RAM/VRAM usage.
 
 ### 4) GPU monitoring panel shows "NVML unavailable"?
 

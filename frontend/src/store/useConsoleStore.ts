@@ -13,6 +13,8 @@ type ConsoleState = {
 
   models: ModelInfo[]
   currentModelId?: string
+  currentModel?: ModelInfo
+  depthModel?: ModelInfo
   classes: string[]
 
   lastPred?: PredResponse
@@ -35,6 +37,7 @@ type ConsoleState = {
 
   setModels: (models: ModelInfo[]) => void
   setCurrentModel: (model?: ModelInfo) => void
+  setDepthModel: (model?: ModelInfo) => void
 
   setLastPred: (pred?: PredResponse) => void
 
@@ -55,8 +58,8 @@ type ConsoleState = {
 
 export const useConsoleStore = create<ConsoleState>((set, get) => ({
   engine: { device: 'cpu', warming: false },
-  params: { conf: 0.25, iou: 0.7, classFilter: [], track: false },
-  osd: { bbox: true, masks: true, keypoints: true, labels: true, heatmap: false },
+  params: { conf: 0.25, iou: 0.7, classFilter: [], track: false, imgsz: 640, maxDet: 300, nms: 'auto', depthMin: 0.1, depthMax: 20 },
+  osd: { bbox: true, masks: true, keypoints: true, labels: true, heatmap: false, dense: true, denseOpacity: 0.45 },
 
   models: [],
   currentModelId: undefined,
@@ -84,9 +87,13 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
   setCurrentModel: (model) =>
     set({
       currentModelId: model?.id,
+      currentModel: model,
       classes: model ? Object.values(model.names) : [],
-      params: model ? { ...get().params, classFilter: [] } : get().params,
+      params: model ? { ...get().params, classFilter: [], track: !!model.capabilities?.tracking && get().params.track,
+        nms: model.capabilities?.nmsFree ? get().params.nms : 'auto' } : get().params,
+      lastPred: undefined,
     }),
+  setDepthModel: (model) => set({ depthModel: model, lastPred: undefined }),
 
   setLastPred: (pred) =>
     set((s) => ({

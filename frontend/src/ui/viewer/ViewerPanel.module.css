@@ -10,6 +10,10 @@
   gap: var(--s-12);
 }
 
+.wrap > * {
+  flex-shrink: 0;
+}
+
 .tab {
   cursor: pointer;
   padding: 10px 14px;

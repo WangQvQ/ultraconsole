@@ -4,6 +4,7 @@ import type {
   PredBBox,
   PredInstanceKeypoints,
   PredMask,
+  PredDenseMap,
 } from '../store/useConsoleStore'
 
 export type FitContain = {
@@ -65,9 +66,39 @@ export function drawBoxes(
     const y = fc.offY + b.y1 * fc.scale
     const w = (b.x2 - b.x1) * fc.scale
     const h = (b.y2 - b.y1) * fc.scale
-    ctx.strokeRect(x, y, w, h)
+    if (b.corners?.length === 4) {
+      ctx.beginPath()
+      b.corners.forEach(([px, py], i) => {
+        if (i === 0) ctx.moveTo(fc.offX + px * fc.scale, fc.offY + py * fc.scale)
+        else ctx.lineTo(fc.offX + px * fc.scale, fc.offY + py * fc.scale)
+      })
+      ctx.closePath()
+      ctx.stroke()
+    } else ctx.strokeRect(x, y, w, h)
     if (showLabels && b.label) drawLabel(ctx, b.label, x, y, color)
   }
+}
+
+const denseImages = new WeakMap<PredDenseMap, HTMLImageElement>()
+export function drawDenseOverlay(ctx: CanvasRenderingContext2D, map: PredDenseMap, fc: FitContain, opacity: number, redraw: () => void) {
+  let img = denseImages.get(map)
+  if (!img) {
+    img = new Image()
+    denseImages.set(map, img)
+    img.onload = redraw
+    img.src = `data:image/png;base64,${map.pngBase64}`
+  }
+  if (img.complete && img.naturalWidth) {
+    ctx.save()
+    ctx.globalAlpha = opacity
+    ctx.imageSmoothingEnabled = map.unit === 'm'
+    ctx.drawImage(img, fc.offX, fc.offY, fc.drawW, fc.drawH)
+    ctx.restore()
+  }
+}
+
+export function drawClassifications(ctx: CanvasRenderingContext2D, items: { cls: string; conf: number }[], fc: FitContain) {
+  items.forEach((item, i) => drawLabel(ctx, `${item.cls} ${(item.conf * 100).toFixed(1)}%`, fc.offX + 8, fc.offY + 32 + i * 28))
 }
 
 // ---- Masks（实例分割） ----
@@ -219,10 +250,10 @@ export function drawTrails(ctx: CanvasRenderingContext2D, trail: TrailMap, fc: F
     ctx.strokeStyle = colorFor(id, 0.7)
     ctx.beginPath()
     const p0 = pts[0]
-    ctx.moveTo(fc.offX + p0.x * fc.scale, fc.offY + p0.y * fc.scale)
+    ctx.moveTo(fc.offX + p0.x * fc.drawW, fc.offY + p0.y * fc.drawH)
     for (let i = 1; i < pts.length; i++) {
       const p = pts[i]
-      ctx.lineTo(fc.offX + p.x * fc.scale, fc.offY + p.y * fc.scale)
+      ctx.lineTo(fc.offX + p.x * fc.drawW, fc.offY + p.y * fc.drawH)
     }
     ctx.stroke()
   }

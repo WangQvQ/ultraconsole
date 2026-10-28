@@ -40,6 +40,16 @@ export async function apiSelectModel(modelId: string) {
   return json<ModelInfo>(res)
 }
 
+export async function apiSession() {
+  return json<{ model: ModelInfo | null; depthModel: ModelInfo | null; device: DeviceType; params: Params }>(await apiFetch('/api/session'))
+}
+
+export async function apiSelectDepthModel(modelId: string | null) {
+  return json<ModelInfo | null>(await apiFetch('/api/models/depth', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ modelId }),
+  }))
+}
+
 export async function apiSelectEngine(device: DeviceType) {
   const res = await apiFetch('/api/engine/select', {
     method: 'POST',

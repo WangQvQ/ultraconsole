@@ -1,0 +1,15 @@
+name: Feature idea / 功能建议
+description: Suggest a reusable example, integration or console improvement.
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case / 使用场景
+      description: What input do you have and what result would help?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 预期功能
+      description: Include a small example or reference if possible.

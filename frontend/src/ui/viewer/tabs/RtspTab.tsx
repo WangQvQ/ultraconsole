@@ -155,7 +155,7 @@ export function RtspTab() {
       onOpen: () => {
         // 每次连接（含重连）都重发 rtsp.start
         const m = startMsgRef.current
-        if (m) wsRef.current?.send(m)
+        if (m) wsRef.current?.send(JSON.stringify({ ...JSON.parse(m), ...useConsoleStore.getState().params }))
       },
       onMessage: (data) => {
         if (!runningRef.current) return

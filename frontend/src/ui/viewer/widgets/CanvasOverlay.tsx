@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useConsoleStore, type PredResponse } from '../../../store/useConsoleStore'
 import {
   drawBoxes,
+  drawClassifications,
+  drawDenseOverlay,
   drawCountingLines,
   drawCountingZones,
   drawHeatmap,
@@ -28,6 +30,7 @@ export function CanvasOverlay(props: {
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
+  const osd = useConsoleStore((s) => s.osd)
   const eventsConfig = useConsoleStore((s) => s.eventsConfig)
 
   const predRef = useRef<PredResponse | undefined>(props.pred)
@@ -114,6 +117,10 @@ export function CanvasOverlay(props: {
         const fc = fitContain(r.width, r.height, srcW, srcH)
 
         // 顺序：mask（底） → zone/line → heatmap → trail → bbox → keypoints
+        const map = pred?.depth ?? pred?.semantic
+        const mapFlags = useConsoleStore.getState().osd
+        if (map && mapFlags.dense !== false) drawDenseOverlay(ctx, map, fc, mapFlags.denseOpacity ?? 0.45, redraw)
+        if (pred?.classifications && flags.showLabels) drawClassifications(ctx, pred.classifications, fc)
         if (pred && flags.showMasks && pred.masks && pred.masks.length > 0) {
           drawMasks(ctx, pred.masks, fc)
         }
@@ -160,6 +167,7 @@ export function CanvasOverlay(props: {
     props.showHeatmap,
     props.drawEvents,
     eventsConfig,
+    osd,
   ])
 
   return <canvas ref={canvasRef} className={styles.canvas} />

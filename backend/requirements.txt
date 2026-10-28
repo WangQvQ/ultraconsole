@@ -2,9 +2,12 @@ fastapi==0.115.14
 uvicorn[standard]==0.34.3
 python-multipart==0.0.20
 pydantic==2.11.7
-ultralytics==8.3.162
+ultralytics==8.4.191
+lap==0.5.13
 opencv-python==4.11.0.86
-numpy==2.1.1
+numpy==2.1.1; sys_platform != "darwin"
+numpy==1.26.4; sys_platform == "darwin" and python_version < "3.11"
+numpy==2.3.5; sys_platform == "darwin" and python_version >= "3.11"
 Pillow==11.2.1
 psutil==7.0.0
 nvidia-ml-py==12.575.51

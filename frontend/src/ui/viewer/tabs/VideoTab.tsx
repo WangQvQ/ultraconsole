@@ -80,14 +80,14 @@ export function VideoTab() {
     setLastPred(undefined)
     useConsoleStore.getState().resetCounters()
     const snapshot = useConsoleStore.getState()
-    const analysis = createVideoReport(fileName, video.duration, targetFps, modelId, { ...snapshot.params, track: true }, snapshot.eventsConfig)
+    const analysis = createVideoReport(fileName, video.duration, targetFps, modelId, { ...snapshot.params, track: snapshot.currentModel?.capabilities?.tracking ?? false }, snapshot.eventsConfig)
     reportRef.current = analysis
     setReport({ ...analysis })
     const tracker = newTrackerState()
     let session: VideoInferenceSession | undefined
     // Changing model, engine, parameters or rules invalidates a run rather than mixing results.
     const unsubscribe = useConsoleStore.subscribe((next) => {
-      if (next.currentModelId !== snapshot.currentModelId || next.engine.device !== snapshot.engine.device ||
+      if (next.currentModelId !== snapshot.currentModelId || next.depthModel !== snapshot.depthModel || next.engine.device !== snapshot.engine.device ||
           next.params !== snapshot.params || next.eventsConfig !== snapshot.eventsConfig) controller.abort()
     })
     try {

@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Vite-8.0-646CFF?logo=vite&logoColor=white&style=flat-square" alt="Vite" />
   <img src="https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white&style=flat-square" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Ultralytics-YOLOv8-FF6B00?logo=ultralytics&logoColor=white&style=flat-square" alt="YOLOv8" />
+  <img src="https://img.shields.io/badge/Ultralytics-8.4.191-FF6B00?logo=ultralytics&logoColor=white&style=flat-square" alt="Ultralytics 8.4.191" />
   <img src="https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white&style=flat-square" alt="OpenCV" />
 </p>
 
@@ -33,11 +33,25 @@
   <img src="https://img.shields.io/badge/Heatmap-Spatial-EAB308?style=flat-square" alt="Heatmap" />
 </p>
 
-面向工业质检 / 安防监控 / 算法调优场景的 **通用目标检测可视化控制台**：模型热切换、参数热更新、Image/Video/Webcam/RTSP/多路监控墙输入、OSD 叠加（含分割/姿态）、ByteTrack 跟踪 + 越线/区域计数事件、空间热力图、GPU/CPU/延迟监控、Webhook 告警出系统、配置一键导入导出、WebSocket 自动重连。
+面向工业质检 / 安防监控 / 算法调优场景的 **多任务视觉推理控制台**：模型热切换、参数热更新、Image/Video/Webcam/RTSP/多路监控墙输入、OSD 叠加（含分割/姿态）、ByteTrack 跟踪 + 越线/区域计数事件、空间热力图、GPU/CPU/延迟监控、Webhook 告警出系统、配置一键导入导出、WebSocket 自动重连。
+
+## 最新模型与深度估计
+
+当前适配 **Ultralytics 8.4.191**，保留 YOLOv8 / YOLO11 检测兼容，并支持 YOLO26 的检测、实例分割、姿态、分类 Top-K、OBB 旋转框、语义分割和单目深度七种任务。模型选择后返回真实任务与能力，控制面板据此启用参数和跟踪；Video 对不支持跟踪的任务执行普通顺序推理。
+
+深度权重可以作为主模型独立运行，也可以在“辅助深度模型”中与带框的主模型融合。同一帧的分割掩膜内取有效深度中位数；其他带框任务使用框中心区域近似值。支持固定深度色标、透明度、采样值查询、采样 NPY 与预览 PNG 下载。深度为模型估计值，绝对尺度需针对相机验证或标定；图像叠加、鼠标查询与 NPY 使用最长边 256 像素的采样图，目标融合和统计使用完整模型输出。
+
+模型示例：`yolo26n.pt`、`yolo26n-seg.pt`、`yolo26n-pose.pt`、`yolo26n-cls.pt`、`yolo26n-obb.pt`、`yolo26n-sem.pt`、`yolo26n-depth.pt`。放入 `backend/models/` 后选择加载。需要下载并验证官方模型时，显式运行：
+
+```bash
+python backend/scripts/smoke_models.py --download --device cpu
+```
+
+详细任务协议、导出格式边界与优化结论见 [兼容性说明](docs/compatibility.md)。欢迎通过 [贡献指南](CONTRIBUTING.md) 提交模型适配、匿名 BadCase、复现测试和功能建议；仓库提供模型兼容与功能建议的 Issue 模板。
 
 ## 页面预览（Screenshot）
 
-![Ultralytics 工业级前端推理控制台预览](preview.png)
+![Ultralytics 工业级前端推理控制台预览](docs/images/depth-fusion.png)
 
 ## 项目亮点（为什么值得用）
 
@@ -62,7 +76,7 @@
 - **Engine**：CPU/CUDA 切换；同设备直接 no-op，不同设备只 warmup（不重 load 权重）
 - **NMS**：Conf/IoU 滑块实时调整，前端 200ms 防抖回写
 - **Class Filter**：多选标签过滤类别
-- **Tracking**：勾选启用 ByteTrack（Webcam / RTSP / Wall；Video 分析自动启用），bbox 自动带 `#trackId`
+- **Tracking**：勾选启用 ByteTrack（Webcam / RTSP / Wall；带框任务的 Video 分析自动启用），bbox 自动带 `#trackId`
 
 ### 输入源
 
@@ -94,7 +108,7 @@
 
 1. 在 Model Hub 选择模型，切换到 **Video**，选择或拖入浏览器可解码的本地视频。
 2. 点击「画计数线」，在画面中点击两个端点；或点击「画计数区」，依次点击至少三个顶点，再点击起点闭合。画好后点击「完成绘制」。
-3. 设置采样 FPS（1–30，默认 8），点击「从头分析（含跟踪）」。Video 自动启用 ByteTrack，无需勾选实时流的 Tracking 开关。
+3. 设置采样 FPS（1–30，默认 8），点击「从头分析」。带框任务的 Video 分析自动启用 ByteTrack，无需勾选实时流的 Tracking 开关。
 4. 在 Counters / Events 查看越线方向、区域当前数量、累计进入次数和事件的视频时间。
 5. 完成或停止后，点击「导出分析 CSV」。切换文件或离开 Video 前请先导出，报告仅保存在当前页面内存中。
 
@@ -230,11 +244,13 @@ API Token 会被编译进浏览器端资源，因此它是部署级共享访问�
 
 | Method | Path | 说明 |
 |---|---|---|
-| `GET` | `/api/health` | 健康检查 |
+| `GET` | `/api/health` | 健康检查、运行时版本与协议版本 |
+| `GET` | `/api/session` | 当前模型、辅助深度模型、设备及参数 |
 | `GET` | `/api/models` | 列出 `models/` 下可用模型 + 当前已加载模型回填 |
 | `POST` | `/api/models/select` | 加载模型（`{modelId}`，做路径白名单 + 后缀校验） |
+| `POST` | `/api/models/depth` | 选择辅助深度模型（`{modelId}`），传 `null` 关闭 |
 | `POST` | `/api/engine/select` | 切换 CPU/CUDA（`{device}`，同设备 no-op） |
-| `GET` `/POST` | `/api/params` | 获取/更新 `{conf, iou, classFilter, track}` |
+| `GET` `/POST` | `/api/params` | 获取/更新 `{conf, iou, classFilter, track, imgsz, maxDet, nms, depthMin, depthMax}` |
 | `POST` | `/api/infer/image` | 单图推理（`multipart/form-data: file`） |
 | `POST` | `/api/infer/frame` | 兼容旧客户端的单帧推理（同 image 入口）；Video 分析使用 `/ws/infer` |
 | `GET` | `/api/system/stats` | CPU/GPU/Mem + 推理延迟分位 |
@@ -369,7 +385,7 @@ V1 优先"可用与易集成"：前端只需填地址即可出画面；后续如
 
 ### 3）多路 Wall 同屏跟踪时 trackId 会不会跨路串号？
 
-当前实现按跟踪 key 分配独立模型实例：Webcam/Video 按连接隔离，RTSP/Wall 按 `streamId` 隔离。同一监控墙的各路目标不会共用跟踪状态，但不同路的数字 ID 可以相同，不能当作跨摄像头身份。不同客户端连接同一后端时，应避免复用相同 RTSP `streamId`。独立实例会增加内存/显存占用。
+当前实现按跟踪 key 分配独立模型实例：Webcam/Video 按连接隔离，RTSP/Wall 按连接、`streamId` 和工作线程实例隔离。同一监控墙的各路目标不会共用跟踪状态，但不同路的数字 ID 可以相同，不能当作跨摄像头身份。不同客户端或重启后的 RTSP 工作线程拥有不同跟踪 key。独立实例会增加内存/显存占用。
 
 ### 4）GPU 监控面板显示"NVML 不可用"？
 

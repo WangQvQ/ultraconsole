@@ -22,6 +22,7 @@ export function ImageTab() {
   const roi = useConsoleStore((s) => s.roi)
   const setRoi = useConsoleStore((s) => s.setRoi)
   const modelId = useConsoleStore((s) => s.currentModelId)
+  const depthModel = useConsoleStore((s) => s.depthModel)
   const device = useConsoleStore((s) => s.engine.device)
   const pushLog = useConsoleStore((s) => s.pushLog)
 
@@ -113,7 +114,7 @@ export function ImageTab() {
     reInferTimerRef.current = window.setTimeout(() => {
       rerunWithLatestState(imgFile)
     }, 250)
-  }, [params.conf, params.iou, params.classFilter, imgFile])
+  }, [params, modelId, depthModel, device, imgFile])
 
   return (
     <div className={styles.wrap}>

@@ -74,7 +74,7 @@ class FakeSocket {
   onmessage?: (message: { data: string }) => void
   onclose?: (() => void) | null
   onerror?: (() => void) | null
-  sent: { frameId: string }[] = []
+  sent: { frameId: string; track?: boolean }[] = []
   constructor() { FakeSocket.instances.push(this); queueMicrotask(() => this.onopen?.()) }
   send(text: string) { this.sent.push(JSON.parse(text)) }
   close() { this.readyState = 3 }
@@ -99,4 +99,18 @@ it('isolates sockets between runs and rejects in-flight work on cancellation', a
   socket.onmessage?.({ data: JSON.stringify({ type: 'pred', ...prediction(0.4), frameId: socket.sent[0].frameId }) })
   await expect(result).resolves.toMatchObject({ bboxes: prediction(0.4).bboxes })
   second.close()
+})
+
+it('preserves tracking=false for video tasks without boxes', async () => {
+  vi.stubGlobal('WebSocket', FakeSocket)
+  vi.stubGlobal('location', { protocol: 'http:', host: 'localhost' })
+  const session = new VideoInferenceSession(new AbortController().signal)
+  const result = session.infer('jpeg', { ...params, track: false })
+  await Promise.resolve()
+  await Promise.resolve()
+  const socket = FakeSocket.instances.at(-1)!
+  expect(socket.sent[0].track).toBe(false)
+  socket.onmessage?.({ data: JSON.stringify({ type: 'pred', ...prediction(0), bboxes: [], taskType: 'depth', frameId: socket.sent[0].frameId }) })
+  await expect(result).resolves.toMatchObject({ taskType: 'depth', bboxes: [] })
+  session.close()
 })

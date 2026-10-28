@@ -112,7 +112,7 @@ export class VideoInferenceSession {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.close(new Error('Video inference timed out')), 120000)
       this.pending = { resolve, reject, timer }
-      this.socket.send(JSON.stringify({ type: 'frame', frameId: this.frameId, ts: Date.now() / 1000, imageJpegBase64, ...params, track: true }))
+      this.socket.send(JSON.stringify({ type: 'frame', frameId: this.frameId, ts: Date.now() / 1000, imageJpegBase64, ...params }))
     })
   }
   close(error = new Error('Video analysis ended')) {

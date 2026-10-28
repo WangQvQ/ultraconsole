@@ -1,6 +1,8 @@
 import {
   apiGetWebhook,
   apiSelectEngine,
+  apiSelectModel,
+  apiSelectDepthModel,
   apiSetWebhook,
   apiUpdateParams,
   type WebhookConfig,
@@ -15,7 +17,7 @@ import {
   type RoiState,
 } from '../store/useConsoleStore'
 
-const VERSION = '1.0'
+const VERSION = '1.1'
 
 export type FullConfig = {
   version: string
@@ -25,6 +27,7 @@ export type FullConfig = {
   params: Params
   engine: { device: DeviceType }
   modelId?: string
+  depthModelId?: string | null
   webhook?: WebhookConfig
   // 客户端
   osd: OSDFlags
@@ -49,6 +52,7 @@ export async function collectConfig(): Promise<FullConfig> {
     params: s.params,
     engine: { device: s.engine.device },
     modelId: s.currentModelId,
+    depthModelId: s.depthModel?.id ?? null,
     webhook,
     osd: s.osd,
     roi: s.roi,
@@ -94,6 +98,19 @@ export async function applyConfig(json: unknown): Promise<ApplyResult> {
 
   const store = useConsoleStore.getState()
 
+  if (typeof json.modelId === 'string') {
+    try {
+      store.setCurrentModel(await apiSelectModel(json.modelId))
+      applied.push('modelId')
+    } catch (e) { errors.push({ key: 'modelId', reason: String(e) }) }
+  }
+  if (typeof json.depthModelId === 'string' || json.depthModelId === null) {
+    try {
+      store.setDepthModel((await apiSelectDepthModel(json.depthModelId)) ?? undefined)
+      applied.push('depthModelId')
+    } catch (e) { errors.push({ key: 'depthModelId', reason: String(e) }) }
+  }
+
   // 客户端：osd / roi / alertConfig / eventsConfig
   if (isObj(json.osd)) {
     store.setOSD(json.osd as Partial<OSDFlags>)
@@ -116,14 +133,19 @@ export async function applyConfig(json: unknown): Promise<ApplyResult> {
   if (isObj(json.params)) {
     const p = json.params as Partial<Params>
     const next: Params = {
+      ...useConsoleStore.getState().params,
       conf: typeof p.conf === 'number' ? p.conf : store.params.conf,
       iou: typeof p.iou === 'number' ? p.iou : store.params.iou,
       classFilter: Array.isArray(p.classFilter) ? (p.classFilter as string[]) : store.params.classFilter,
       track: typeof p.track === 'boolean' ? p.track : store.params.track,
+      imgsz: p.imgsz ?? 640,
+      maxDet: p.maxDet ?? 300,
+      nms: p.nms ?? 'auto',
+      depthMin: p.depthMin ?? 0.1,
+      depthMax: p.depthMax ?? 20,
     }
-    store.setParams(next)
     try {
-      await apiUpdateParams(next)
+      store.setParams(await apiUpdateParams(next))
       applied.push('params')
     } catch (e) {
       errors.push({ key: 'params', reason: String(e) })

@@ -16,7 +16,7 @@
     "selectModelHint": "请选择模型（backend/models）",
     "warming": "预热中…",
     "classHint": "选择模型后，这里会出现类别标签。",
-    "enableTracking": "启用 ByteTrack（Webcam / RTSP / Wall；Video 自动启用）",
+    "enableTracking": "启用 ByteTrack（仅带框的任务；Video 按任务自动启用）",
     "trackingHint": "开启后 bbox 会带 trackId、轨迹 & 计数线/区域生效。",
     "drawLineHint": "画线/区域：在画面右键菜单切换\"Line / Zone\"工具，或使用 ROI 工具旁的快捷按钮。"
   },
@@ -30,7 +30,7 @@
   "video": {
     "selectVideo": "选择视频",
     "dropHint": "松开以载入视频",
-    "analyze": "从头分析（含跟踪）",
+    "analyze": "从头分析",
     "exportReport": "导出分析 CSV",
     "finishEdit": "完成绘制",
     "drawLine": "画计数线",
@@ -109,5 +109,35 @@
     "lineCross": "计数线 {{name}} {{direction}}",
     "zoneEnter": "进入区域 {{name}}",
     "zoneLeave": "离开区域 {{name}}"
+  },
+  "tasks": {
+    "detect": "目标检测",
+    "segment": "实例分割",
+    "pose": "姿态估计",
+    "classify": "图像分类",
+    "obb": "旋转框检测",
+    "semantic": "语义分割",
+    "depth": "深度估计",
+    "parameters": "推理参数",
+    "imageSize": "输入尺寸",
+    "nmsMode": "后处理模式",
+    "auto": "自动（默认）",
+    "nmsFree": "NMS-free（模型需支持）",
+    "nmsHint": "自动模式保留上游默认行为；NMS-free 仅适用于带端到端检测头的模型，IoU 不参与此模式。",
+    "depthFusion": "辅助深度模型",
+    "fusionOff": "关闭深度融合",
+    "fusionHint": "选择 task=depth 的权重。主模型为检测、分割、姿态或 OBB 时处理同一帧，额外消耗推理时间与内存；分割使用掩膜中位数，其余使用框中心区域估计。",
+    "overlay": "叠加深度 / 语义图",
+    "opacity": "叠加透明度",
+    "depthRange": "深度色标范围（固定）",
+    "sampleHint": "采样图 {{width}} × {{height}}，保留原始数值尺度",
+    "depthStats": "最小 / 中位 / 最大估计深度",
+    "colorScale": "固定色标",
+    "metricHint": "单位为米，属于模型估计；具体相机的绝对尺度需验证或标定。",
+    "hoverHint": "移动指针查看对应原图位置的采样值",
+    "exportMap": "导出采样数据 NPY",
+    "exportPreview": "导出预览 PNG",
+    "classSearch": "搜索类别",
+    "classLimit": "仅显示前 80 项，请搜索需要的类别。"
   }
 }

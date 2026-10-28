@@ -16,7 +16,7 @@
     "selectModelHint": "Select model (backend/models)",
     "warming": "Warming up…",
     "classHint": "Class labels appear after selecting a model.",
-    "enableTracking": "Enable ByteTrack (Webcam / RTSP / Wall; automatic for Video)",
+    "enableTracking": "Enable ByteTrack (box tasks only; automatic for video)",
     "trackingHint": "Enables trackId on bboxes, trails & counting lines/zones.",
     "drawLineHint": "Draw lines/zones via right-click menu or the buttons next to ROI tool."
   },
@@ -30,7 +30,7 @@
   "video": {
     "selectVideo": "Select Video",
     "dropHint": "Release to load video",
-    "analyze": "Analyze from start (with tracking)",
+    "analyze": "Analyze from start",
     "exportReport": "Export analysis CSV",
     "finishEdit": "Finish drawing",
     "drawLine": "Draw counting line",
@@ -109,5 +109,35 @@
     "lineCross": "Line {{name}} {{direction}}",
     "zoneEnter": "Entered zone {{name}}",
     "zoneLeave": "Left zone {{name}}"
+  },
+  "tasks": {
+    "detect": "Detection",
+    "segment": "Instance segmentation",
+    "pose": "Pose estimation",
+    "classify": "Classification",
+    "obb": "Oriented detection",
+    "semantic": "Semantic segmentation",
+    "depth": "Depth estimation",
+    "parameters": "Inference parameters",
+    "imageSize": "Input size",
+    "nmsMode": "Postprocessing mode",
+    "auto": "Auto (default)",
+    "nmsFree": "NMS-free (supported heads only)",
+    "nmsHint": "Auto preserves upstream defaults. NMS-free requires an end-to-end detection head; IoU is not used in this mode.",
+    "depthFusion": "Auxiliary depth model",
+    "fusionOff": "Depth fusion off",
+    "fusionHint": "Select a task=depth checkpoint. Detection, segmentation, pose and OBB run depth on the same frame, using extra time and memory. Segmentation uses mask medians; other tasks use a box-center estimate.",
+    "overlay": "Depth / semantic overlay",
+    "opacity": "Overlay opacity",
+    "depthRange": "Fixed depth color range",
+    "sampleHint": "Sampled map {{width}} × {{height}}, original numeric scale preserved",
+    "depthStats": "Min / median / max estimated depth",
+    "colorScale": "Fixed color scale",
+    "metricHint": "Values are model estimates in meters. Validate or calibrate the scale for your camera.",
+    "hoverHint": "Move the pointer to inspect an approximate original-image location",
+    "exportMap": "Export sampled NPY",
+    "exportPreview": "Export preview PNG",
+    "classSearch": "Search classes",
+    "classLimit": "Showing the first 80 matches. Search to narrow the list."
   }
 }

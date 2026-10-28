@@ -1,0 +1,45 @@
+{
+  "version": "1.1",
+  "app": "ultraconsole",
+  "modelId": "yolo26n-seg.pt",
+  "depthModelId": "yolo26n-depth.pt",
+  "engine": {
+    "device": "cpu"
+  },
+  "params": {
+    "conf": 0.25,
+    "iou": 0.7,
+    "classFilter": [],
+    "track": true,
+    "imgsz": 640,
+    "maxDet": 300,
+    "nms": "auto",
+    "depthMin": 0.1,
+    "depthMax": 20
+  },
+  "osd": {
+    "bbox": true,
+    "masks": true,
+    "keypoints": false,
+    "labels": true,
+    "heatmap": false,
+    "dense": true,
+    "denseOpacity": 0.45
+  },
+  "roi": {
+    "enabled": false,
+    "polygon": [],
+    "closed": false,
+    "applyFilter": false,
+    "mode": "rect"
+  },
+  "alertConfig": {
+    "enabled": false,
+    "minFrames": 5,
+    "sound": false
+  },
+  "eventsConfig": {
+    "lines": [],
+    "zones": []
+  }
+}

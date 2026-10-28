@@ -1,4 +1,6 @@
 export type DeviceType = 'cpu' | 'cuda'
+export type TaskType = 'detect' | 'segment' | 'pose' | 'classify' | 'obb' | 'semantic' | 'depth'
+export type ModelCapabilities = { boxes: boolean; tracking: boolean; masks: boolean; keypoints: boolean; classification: boolean; semantic: boolean; depth: boolean; nms: boolean; nmsFree?: boolean }
 
 export type OSDFlags = {
   bbox: boolean
@@ -6,25 +8,37 @@ export type OSDFlags = {
   keypoints: boolean
   labels: boolean
   heatmap: boolean
+  dense?: boolean
+  denseOpacity?: number
 }
 
-export type Params = { conf: number; iou: number; classFilter: string[]; track: boolean }
+export type Params = { conf: number; iou: number; classFilter: string[]; track: boolean; imgsz?: number; maxDet?: number; nms?: 'auto' | 'free'; depthMin?: number; depthMax?: number }
 export type Telemetry = { fps?: number; preprocessMs?: number; inferenceMs?: number; postprocessMs?: number; vramUtil?: number }
-export type PredBBox = { cls: string; conf: number; x1: number; y1: number; x2: number; y2: number; label?: string; trackId?: number }
+export type PredBBox = { cls: string; conf: number; x1: number; y1: number; x2: number; y2: number; label?: string; trackId?: number; corners?: number[][] | null; depthMeters?: number | null; depthMethod?: 'mask-median' | 'box-center-median' | null; depthValidFraction?: number | null }
 export type PredMask = { cls: string; trackId?: number; points: number[][] }
 export type PredKeypoint = { x: number; y: number; conf?: number }
 export type PredInstanceKeypoints = { cls: string; trackId?: number; points: PredKeypoint[] }
+export type PredDenseMap = {
+  width: number; height: number; dtype: 'float32' | 'uint16'; dataBase64: string; pngBase64: string
+  unit: 'm' | 'class-id'; modelId: string; min?: number | null; max?: number | null; median?: number | null
+  validFraction?: number | null; colorMin?: number | null; colorMax?: number | null; classes: Record<string, string>
+}
 export type PredResponse = {
+  schemaVersion?: number
+  modelId?: string | null
   source?: 'video'
   mediaTime?: number
   frameId?: string
   ts: number
   width: number
   height: number
-  taskType: 'detect' | 'segment' | 'pose'
+  taskType: TaskType
   bboxes: PredBBox[]
   masks?: PredMask[]
   keypoints?: PredInstanceKeypoints[]
+  classifications?: { cls: string; conf: number }[]
+  depth?: PredDenseMap | null
+  semantic?: PredDenseMap | null
   telemetry: Telemetry
 }
 
@@ -59,7 +73,7 @@ export type Counters = {
   byLine: Record<string, { in: number; out: number }>
   byZone: Record<string, { current: number; total: number }>
 }
-export type ModelInfo = { id: string; filename: string; taskType: 'detect' | 'segment' | 'pose'; names: Record<string, string> }
+export type ModelInfo = { id: string; filename: string; taskType: TaskType | null; names: Record<string, string>; capabilities?: ModelCapabilities | null }
 export type LogLevel = 'INFO' | 'WARN' | 'ERROR'
 export type LogEntry = { ts: number; level: LogLevel; event: string; msg: string; fields: Record<string, unknown> }
 export type AlertConfig = { enabled: boolean; targetClass?: string; minFrames: number; sound: boolean }

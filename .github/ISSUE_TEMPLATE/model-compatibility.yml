@@ -1,0 +1,24 @@
+name: Model compatibility / 模型兼容问题
+description: Report loading, inference, task conversion or exported-model problems.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: OS, Python, Ultralytics version and import path, PyTorch, device and browser.
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Model and export / 模型与导出
+      description: Model name/task, original or custom weights, format, export command and input dimensions. Do not attach private weights or credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction / 复现方法
+      description: Steps, expected vs actual result, logs and an anonymized BadCase ZIP if available.
+    validations:
+      required: true

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { apiListModels, apiSelectEngine, apiSelectModel, apiUpdateParams } from '../../api/client'
+import { apiListModels, apiSelectDepthModel, apiSelectEngine, apiSelectModel, apiSession, apiUpdateParams } from '../../api/client'
 import { useT } from '../../i18n'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import type { Params } from '../../api/contracts'
@@ -9,28 +9,41 @@ import styles from './ControlPanel.module.css'
 
 export function ControlPanel() {
   const t = useT()
-  const { engine, params, models, currentModelId, classes } = useConsoleStore()
+  const { engine, params, models, currentModelId, currentModel, depthModel, classes, osd } = useConsoleStore()
   const setEngine = useConsoleStore((s) => s.setEngine)
   const setParams = useConsoleStore((s) => s.setParams)
   const setModels = useConsoleStore((s) => s.setModels)
   const setCurrentModel = useConsoleStore((s) => s.setCurrentModel)
+  const setDepthModel = useConsoleStore((s) => s.setDepthModel)
+  const setOSD = useConsoleStore((s) => s.setOSD)
+  const caps = currentModel?.capabilities
   const pushLog = useConsoleStore((s) => s.pushLog)
 
   const [busy, setBusy] = useState(false)
+  const [classSearch, setClassSearch] = useState('')
 
   useEffect(() => {
-    apiListModels()
-      .then((ms) => setModels(ms))
+    Promise.all([apiListModels(), apiSession()])
+      .then(([ms, session]) => {
+        setModels(ms)
+        setCurrentModel(session.model ?? undefined)
+        setDepthModel(session.depthModel ?? undefined)
+        setParams(session.params)
+        setEngine({ device: session.device, warming: false })
+      })
       .catch((e) => pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'models.list', msg: String(e), fields: {} }))
-  }, [pushLog, setModels])
+  }, [pushLog, setModels, setCurrentModel, setDepthModel, setParams, setEngine])
 
   const classOptions = useMemo(() => Array.from(new Set(classes)).sort(), [classes])
+  const visibleClasses = classOptions.filter((name) => name.toLowerCase().includes(classSearch.toLowerCase()))
 
   async function onSelectModel(modelId: string) {
     setBusy(true)
     try {
       const model = await apiSelectModel(modelId)
       setCurrentModel(model)
+      setClassSearch('')
+      setModels(models.map((m) => m.id === model.id ? model : m))
       pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'model.selected', msg: modelId, fields: {} })
     } catch (e) {
       pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'model.select_failed', msg: String(e), fields: { modelId } })
@@ -40,9 +53,10 @@ export function ControlPanel() {
   }
 
   async function onToggleEngine(next: 'cpu' | 'cuda') {
-    setEngine({ warming: true, device: next })
+    setEngine({ warming: true })
     try {
       await apiSelectEngine(next)
+      setEngine({ device: next })
       pushLog({ ts: Date.now() / 1000, level: 'INFO', event: 'engine.selected', msg: next, fields: {} })
     } catch (e) {
       pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'engine.select_failed', msg: String(e), fields: { device: next } })
@@ -96,6 +110,8 @@ export function ControlPanel() {
         </div>
       </Card>
 
+      {currentModel && <div className={styles.hint}>{t(`tasks.${currentModel.taskType}`)} · {currentModel.filename}</div>}
+
       <Card title="Engine" right={engine.warming ? t('control.warming') : engine.device.toUpperCase()}>
         <div className={styles.row}>
           <NeoButton onClick={() => onToggleEngine('cpu')} disabled={engine.warming || engine.device === 'cpu'}>
@@ -107,7 +123,25 @@ export function ControlPanel() {
         </div>
       </Card>
 
-      <Card title="NMS Controls">
+      <Card title={t('tasks.parameters')}>
+        <div className={styles.field}>
+          <label className={styles.label}>{t('tasks.imageSize')}
+            <select className={styles.select} value={params.imgsz ?? 640} onChange={(e) => {
+              const imgsz = Number(e.target.value)
+              setParams({ imgsz }); flushParams({ ...params, imgsz })
+            }}>{[320, 480, 640, 768, 1024, 1280, 2048].map((size) => <option key={size} value={size}>{size}</option>)}</select>
+          </label>
+        </div>
+        {caps?.nms && <div className={styles.field}>
+          <label className={styles.label}>{t('tasks.nmsMode')}
+            <select className={styles.select} value={params.nms ?? 'auto'} onChange={(e) => {
+              const nms = e.target.value as 'auto' | 'free'
+              setParams({ nms }); flushParams({ ...params, nms })
+            }}><option value="auto">{t('tasks.auto')}</option><option value="free" disabled={!caps?.nmsFree}>{t('tasks.nmsFree')}</option></select>
+          </label>
+          <div className={styles.hint}>{t('tasks.nmsHint')}</div>
+        </div>}
+        <fieldset disabled={!caps?.boxes} style={{ border: 0, padding: 0, margin: 0, opacity: caps?.boxes ? 1 : 0.5 }}>
         <div className={styles.field}>
           <div className={styles.labelRow}>
             <div className={styles.label}>Conf Threshold</div>
@@ -141,6 +175,7 @@ export function ControlPanel() {
             max={1}
             step={0.01}
             value={params.iou}
+            disabled={params.nms === 'free'}
             onChange={(e) => {
               const iou = Number(e.target.value)
               const next = { ...params, iou }
@@ -149,14 +184,17 @@ export function ControlPanel() {
             }}
           />
         </div>
+        </fieldset>
       </Card>
 
-      <Card title="Class Filter">
+      {!caps?.depth && <Card title="Class Filter">
+        {classOptions.length > 80 && <input aria-label={t('tasks.classSearch')} className={styles.select} placeholder={t('tasks.classSearch')}
+          value={classSearch} onChange={(e) => setClassSearch(e.target.value)} />}
         {classOptions.length === 0 ? (
           <div className={styles.hint}>{t('control.classHint')}</div>
         ) : (
           <div className={styles.tags}>
-            {classOptions.map((c) => {
+            {visibleClasses.slice(0, 80).map((c) => {
               const active = params.classFilter.includes(c)
               return (
                 <button
@@ -175,13 +213,15 @@ export function ControlPanel() {
             })}
           </div>
         )}
-      </Card>
+        {visibleClasses.length > 80 && <div className={styles.hint}>{t('tasks.classLimit')}</div>}
+      </Card>}
 
       <Card title="Tracking & Events" right={params.track ? 'on' : 'off'}>
         <label className={styles.toggleRow}>
           <input
             type="checkbox"
             checked={params.track}
+            disabled={!caps?.tracking}
             onChange={(e) => {
               const track = e.target.checked
               const next = { ...params, track }
@@ -196,6 +236,34 @@ export function ControlPanel() {
           <br />
           {t('control.drawLineHint')}
         </div>
+      </Card>
+
+      <Card title={t('tasks.depthFusion')}>
+        <select aria-label={t('tasks.depthFusion')} className={styles.select} value={depthModel?.id ?? ''} disabled={busy}
+          onChange={async (e) => {
+            setBusy(true)
+            try {
+              const model = await apiSelectDepthModel(e.target.value || null)
+              setDepthModel(model ?? undefined)
+            } catch (error) {
+              pushLog({ ts: Date.now() / 1000, level: 'ERROR', event: 'depth.select_failed', msg: String(error), fields: {} })
+            } finally { setBusy(false) }
+          }}>
+          <option value="">{t('tasks.fusionOff')}</option>
+          {models.map((m) => <option key={m.id} value={m.id}>{m.filename}</option>)}
+        </select>
+        <div className={styles.hint}>{t('tasks.fusionHint')}</div>
+        <label className={styles.toggleRow}><input type="checkbox" checked={osd.dense !== false} onChange={(e) => setOSD({ dense: e.target.checked })} />{t('tasks.overlay')}</label>
+        <label className={styles.label}>{t('tasks.opacity')}
+          <input aria-label={t('tasks.opacity')} className={styles.slider} type="range" min={0} max={1} step={0.05} value={osd.denseOpacity ?? 0.45}
+            onChange={(e) => setOSD({ denseOpacity: Number(e.target.value) })} />
+        </label>
+        <label className={styles.label}>{t('tasks.depthRange')}
+          <select className={styles.select} value={params.depthMax ?? 20} onChange={(e) => {
+            const depthMax = Number(e.target.value)
+            setParams({ depthMax }); flushParams({ ...params, depthMax })
+          }}>{[10, 20, 50, 100, 150].map((range) => <option key={range} value={range}>{params.depthMin ?? 0.1}–{range} m</option>)}</select>
+        </label>
       </Card>
     </div>
   )

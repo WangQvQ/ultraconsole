@@ -94,7 +94,7 @@ export function WallTab() {
       onOpen: () => {
         // 重连后重发所有 streamId 的 rtsp.start
         for (const m of startMsgsRef.current.values()) {
-          wsRef.current?.send(m)
+          wsRef.current?.send(JSON.stringify({ ...JSON.parse(m), ...useConsoleStore.getState().params }))
         }
       },
       onMessage: (data) => {
